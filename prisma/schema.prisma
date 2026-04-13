@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SheetApi {
+  id            String   @id @default(cuid())
+  name          String
+  spreadsheetId String
+
+  // Permissions
+  allowRead   Boolean @default(true)
+  allowCreate Boolean @default(true)
+  allowUpdate Boolean @default(true)
+  allowDelete Boolean @default(true)
+
+  // Cache
+  cacheTtlSeconds Int @default(60)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

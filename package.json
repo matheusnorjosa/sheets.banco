@@ -1,0 +1,28 @@
+{
+  "name": "sheets.banco",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turn Google Sheets into REST APIs",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w packages/api",
+    "build": "npm run build -w packages/api",
+    "lint": "npm run lint -w packages/api",
+    "typecheck": "npm run typecheck -w packages/api",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "seed": "npm run seed -w packages/api"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.3"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  }
+}
