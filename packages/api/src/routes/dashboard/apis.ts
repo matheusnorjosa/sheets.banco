@@ -72,13 +72,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
     const spreadsheetId = extractSpreadsheetId(parsed.data.spreadsheetUrl);
 
-    // Validate access by trying to read column names
+    // Validate access by trying to read column names with user's Google token
     try {
-      await sheetsService.getColumnNames(spreadsheetId);
+      await sheetsService.getColumnNames(userId, spreadsheetId);
     } catch {
       return reply.status(400).send({
         error: true,
-        message: `Could not access the spreadsheet. Make sure it is shared with the service account.`,
+        message: `Could not access the spreadsheet. Make sure you have authorized Google access and the sheet is accessible.`,
         code: 'SHEET_ACCESS_ERROR',
         statusCode: 400,
       });

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
-import { NotFoundError, ValidationError } from '../../lib/errors.js';
+import { NotFoundError, ValidationError, AppError } from '../../lib/errors.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 import { buildFilters, filterAnd, filterOr } from '../../utils/query-parser.js';
 import { applyPagination, castNumbers } from '../../utils/pagination.js';
@@ -23,6 +23,7 @@ const updateBodySchema = z.object({
 
 interface SheetApiRecord {
   spreadsheetId: string;
+  userId: string | null;
   cacheTtlSeconds: number;
   allowRead: boolean;
   allowCreate: boolean;
@@ -32,6 +33,14 @@ interface SheetApiRecord {
 
 function getSheetApi(request: any): SheetApiRecord {
   return request.sheetApi as SheetApiRecord;
+}
+
+function getUserId(request: any): string {
+  const sheetApi = getSheetApi(request);
+  if (!sheetApi.userId) {
+    throw new AppError(500, 'NO_OWNER', 'This API has no owner configured.');
+  }
+  return sheetApi.userId;
 }
 
 function getQueryParams(request: any) {
@@ -66,10 +75,11 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // GET /:apiId — return all rows (with pagination)
   app.get('/:apiId', async (request) => {
     const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
     const query = getQueryParams(request);
     const sheetName = query.sheet;
 
-    let rows = await sheetsService.getRows(sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+    let rows = await sheetsService.getRows(userId, sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
 
     rows = applyPagination(rows, {
       limit: query.limit ? Number(query.limit) : undefined,
@@ -87,26 +97,29 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // GET /:apiId/keys — return column names
   app.get('/:apiId/keys', async (request) => {
     const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
     const query = getQueryParams(request);
-    return sheetsService.getColumnNames(sheetApi.spreadsheetId, query.sheet, sheetApi.cacheTtlSeconds);
+    return sheetsService.getColumnNames(userId, sheetApi.spreadsheetId, query.sheet, sheetApi.cacheTtlSeconds);
   });
 
   // GET /:apiId/count — return row count
   app.get('/:apiId/count', async (request) => {
     const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
     const query = getQueryParams(request);
-    const rows = await sheetsService.getRowCount(sheetApi.spreadsheetId, query.sheet);
+    const rows = await sheetsService.getRowCount(userId, sheetApi.spreadsheetId, query.sheet);
     return { rows };
   });
 
   // GET /:apiId/search — AND search
   app.get('/:apiId/search', async (request) => {
     const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
     const query = getQueryParams(request);
     const sheetName = query.sheet;
     const caseSensitive = query.casesensitive === 'true';
 
-    let rows = await sheetsService.getRows(sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+    let rows = await sheetsService.getRows(userId, sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
 
     const filters = buildFilters(query, caseSensitive);
     rows = filterAnd(rows, filters);
@@ -127,11 +140,12 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // GET /:apiId/search_or — OR search
   app.get('/:apiId/search_or', async (request) => {
     const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
     const query = getQueryParams(request);
     const sheetName = query.sheet;
     const caseSensitive = query.casesensitive === 'true';
 
-    let rows = await sheetsService.getRows(sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+    let rows = await sheetsService.getRows(userId, sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
 
     const filters = buildFilters(query, caseSensitive);
     rows = filterOr(rows, filters);
@@ -152,6 +166,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // POST /:apiId — create rows
   app.post('/:apiId', async (request, reply) => {
     const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
     const query = getQueryParams(request);
     if (!sheetApi.allowCreate) {
       return reply.status(403).send({
@@ -171,13 +186,14 @@ export async function sheetsRoutes(app: FastifyInstance) {
       ? parsed.data.data
       : [parsed.data.data];
 
-    const created = await sheetsService.appendRows(sheetApi.spreadsheetId, rows, query.sheet);
+    const created = await sheetsService.appendRows(userId, sheetApi.spreadsheetId, rows, query.sheet);
     return reply.status(201).send({ created });
   });
 
   // PATCH /:apiId/:column/:value — update rows matching condition
   app.patch('/:apiId/:column/:value', async (request, reply) => {
     const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
     const query = getQueryParams(request);
     if (!sheetApi.allowUpdate) {
       return reply.status(403).send({
@@ -195,6 +211,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
     }
 
     const updated = await sheetsService.updateRows(
+      userId,
       sheetApi.spreadsheetId,
       column,
       value,
@@ -207,6 +224,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // DELETE /:apiId/:column/:value — delete rows matching condition
   app.delete('/:apiId/:column/:value', async (request, reply) => {
     const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
     const query = getQueryParams(request);
     if (!sheetApi.allowDelete) {
       return reply.status(403).send({
@@ -219,6 +237,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
 
     const { column, value } = request.params as { column: string; value: string };
     const deleted = await sheetsService.deleteRows(
+      userId,
       sheetApi.spreadsheetId,
       column,
       value,
@@ -230,6 +249,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // DELETE /:apiId/all — clear all data rows
   app.delete('/:apiId/all', async (request, reply) => {
     const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
     const query = getQueryParams(request);
     if (!sheetApi.allowDelete) {
       return reply.status(403).send({
@@ -240,7 +260,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
       });
     }
 
-    const deleted = await sheetsService.clearAllRows(sheetApi.spreadsheetId, query.sheet);
+    const deleted = await sheetsService.clearAllRows(userId, sheetApi.spreadsheetId, query.sheet);
     return { deleted };
   });
 }

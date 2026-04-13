@@ -12,6 +12,12 @@ model User {
   email        String    @unique
   passwordHash String
   name         String?
+
+  // Google OAuth
+  googleAccessToken  String?
+  googleRefreshToken String?
+  googleTokenExpiry  DateTime?
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sheetApis    SheetApi[]
