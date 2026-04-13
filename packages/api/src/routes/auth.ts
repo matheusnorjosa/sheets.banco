@@ -146,7 +146,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (mode === 'login' || !token) {
       const url = oauth2Client.generateAuthUrl({
         access_type: 'offline',
-        prompt: 'consent',
+        prompt: 'select_account',
         scope: scopes,
         state: JSON.stringify({ mode: 'login' }),
       });
