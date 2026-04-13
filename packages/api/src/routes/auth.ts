@@ -243,7 +243,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       const jwt = app.jwt.sign({ sub: user.id, email: user.email });
-      return reply.redirect(`${env.FRONTEND_URL}/apis?token=${jwt}&google=connected`);
+      return reply.redirect(`${env.FRONTEND_URL}/callback?token=${jwt}&google=connected`);
     } catch {
       return reply.redirect(`${env.FRONTEND_URL}/login?google=error`);
     }
