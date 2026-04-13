@@ -75,10 +75,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     // Validate access by trying to read column names with user's Google token
     try {
       await sheetsService.getColumnNames(userId, spreadsheetId);
-    } catch {
+    } catch (err) {
+      app.log.error({ err, spreadsheetId, userId }, 'Failed to access spreadsheet');
       return reply.status(400).send({
         error: true,
-        message: `Could not access the spreadsheet. Make sure you have authorized Google access and the sheet is accessible.`,
+        message: `Could not access the spreadsheet: ${err instanceof Error ? err.message : 'Unknown error'}`,
         code: 'SHEET_ACCESS_ERROR',
         statusCode: 400,
       });

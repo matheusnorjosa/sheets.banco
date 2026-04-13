@@ -35,4 +35,5 @@ COPY --from=builder /app/packages/shared packages/shared
 
 EXPOSE 3000
 
-CMD ["node", "packages/api/dist/src/index.js"]
+# Push schema to DB then start
+CMD npx prisma db push --schema prisma/schema.prisma --skip-generate && node packages/api/dist/src/index.js

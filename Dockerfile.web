@@ -1,0 +1,31 @@
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY packages/web/package.json packages/web/
+COPY packages/shared/package.json packages/shared/
+
+RUN npm ci --workspace=packages/web --workspace=packages/shared --include-workspace-root
+
+COPY packages/web/ packages/web/
+COPY packages/shared/ packages/shared/
+COPY tsconfig.base.json ./
+
+ENV NEXT_PUBLIC_API_URL=http://localhost:3000
+
+RUN npm run build:web
+
+# Stage 2: Production
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/packages/web/.next/standalone ./
+COPY --from=builder /app/packages/web/.next/static packages/web/.next/static
+COPY --from=builder /app/packages/web/public packages/web/public
+
+EXPOSE 3000
+
+CMD ["node", "packages/web/server.js"]

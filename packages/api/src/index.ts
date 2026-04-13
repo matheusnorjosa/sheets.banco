@@ -18,8 +18,11 @@ const app = Fastify({
   trustProxy: true,
 });
 
-// Security headers
-app.register(helmet);
+// Security headers (relaxed CSP since frontend is separate)
+app.register(helmet, {
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+});
 
 // Global CORS for dashboard/auth routes (sheet routes handle CORS per-API)
 app.register(cors, {

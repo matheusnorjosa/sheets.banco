@@ -3,7 +3,5 @@ dist
 .env
 .git
 .claude
-packages/web
-packages/sdk
 *.log
 coverage

@@ -9,10 +9,6 @@ export interface SheetRow {
   [key: string]: string;
 }
 
-/**
- * Create an OAuth2 client with user's tokens.
- * Automatically refreshes expired tokens and saves them back to the DB.
- */
 async function getSheetsClient(userId: string): Promise<sheets_v4.Sheets> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user?.googleAccessToken || !user?.googleRefreshToken) {
@@ -31,7 +27,6 @@ async function getSheetsClient(userId: string): Promise<sheets_v4.Sheets> {
     expiry_date: user.googleTokenExpiry?.getTime(),
   });
 
-  // Auto-refresh and persist new tokens
   oauth2Client.on('tokens', async (tokens) => {
     const update: any = {};
     if (tokens.access_token) update.googleAccessToken = tokens.access_token;
@@ -43,6 +38,28 @@ async function getSheetsClient(userId: string): Promise<sheets_v4.Sheets> {
   });
 
   return google.sheets({ version: 'v4', auth: oauth2Client });
+}
+
+/**
+ * Resolve the sheet tab name. If not provided, fetches the first tab name from the spreadsheet.
+ */
+async function resolveSheetName(userId: string, spreadsheetId: string, sheetName?: string): Promise<string> {
+  if (sheetName) return sheetName;
+
+  const cacheKey = `firstTab:${spreadsheetId}`;
+  const cached = cache.get<string>(cacheKey);
+  if (cached) return cached;
+
+  const sheets = await getSheetsClient(userId);
+  const response = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: 'sheets.properties.title',
+  });
+  const firstSheet = response.data.sheets?.[0]?.properties?.title;
+  if (!firstSheet) throw new NotFoundError('Spreadsheet has no sheets.');
+
+  cache.set(cacheKey, firstSheet, 300); // cache for 5 min
+  return firstSheet;
 }
 
 function handleSheetError(error: unknown): never {
@@ -67,11 +84,11 @@ export async function getRows(
   if (cached) return cached;
 
   try {
+    const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const range = sheetName ? `'${sheetName}'` : 'Sheet1';
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range,
+      range: `'${tab}'`,
     });
 
     const values = response.data.values;
@@ -109,11 +126,11 @@ export async function getColumnNames(
   if (cached) return cached;
 
   try {
+    const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const range = sheetName ? `'${sheetName}'!1:1` : 'Sheet1!1:1';
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range,
+      range: `'${tab}'!1:1`,
     });
 
     const columns = (response.data.values?.[0] as string[]) ?? [];
@@ -130,11 +147,11 @@ export async function getRowCount(
   sheetName?: string,
 ): Promise<number> {
   try {
+    const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const range = sheetName ? `'${sheetName}'` : 'Sheet1';
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range,
+      range: `'${tab}'`,
     });
 
     const values = response.data.values;
@@ -172,7 +189,8 @@ export async function appendRows(
   sheetName?: string,
 ): Promise<number> {
   try {
-    const headers = await getColumnNames(userId, spreadsheetId, sheetName);
+    const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
+    const headers = await getColumnNames(userId, spreadsheetId, tab);
     if (headers.length === 0) {
       throw new NotFoundError('Sheet has no headers in the first row.');
     }
@@ -183,10 +201,9 @@ export async function appendRows(
     });
 
     const sheets = await getSheetsClient(userId);
-    const range = sheetName ? `'${sheetName}'` : 'Sheet1';
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range,
+      range: `'${tab}'`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values },
     });
@@ -208,11 +225,11 @@ export async function updateRows(
   sheetName?: string,
 ): Promise<number> {
   try {
+    const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const range = sheetName ? `'${sheetName}'` : 'Sheet1';
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range,
+      range: `'${tab}'`,
     });
 
     const allValues = response.data.values;
@@ -236,12 +253,9 @@ export async function updateRows(
           if (ki !== -1) newRow[ki] = val;
         }
 
-        const rowRange = sheetName
-          ? `'${sheetName}'!A${i + 1}`
-          : `Sheet1!A${i + 1}`;
         await sheets.spreadsheets.values.update({
           spreadsheetId,
-          range: rowRange,
+          range: `'${tab}'!A${i + 1}`,
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [newRow] },
         });
@@ -265,11 +279,11 @@ export async function deleteRows(
   sheetName?: string,
 ): Promise<number> {
   try {
+    const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const range = sheetName ? `'${sheetName}'` : 'Sheet1';
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range,
+      range: `'${tab}'`,
     });
 
     const allValues = response.data.values;
@@ -290,7 +304,7 @@ export async function deleteRows(
 
     if (rowIndicesToDelete.length === 0) return 0;
 
-    const sheetId = await getSheetId(userId, spreadsheetId, sheetName);
+    const sheetId = await getSheetId(userId, spreadsheetId, tab);
 
     const requests = rowIndicesToDelete.reverse().map((rowIndex) => ({
       deleteDimension: {
@@ -322,18 +336,18 @@ export async function clearAllRows(
   sheetName?: string,
 ): Promise<number> {
   try {
+    const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const range = sheetName ? `'${sheetName}'` : 'Sheet1';
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range,
+      range: `'${tab}'`,
     });
 
     const allValues = response.data.values;
     if (!allValues || allValues.length < 2) return 0;
 
     const rowCount = allValues.length - 1;
-    const sheetId = await getSheetId(userId, spreadsheetId, sheetName);
+    const sheetId = await getSheetId(userId, spreadsheetId, tab);
 
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
