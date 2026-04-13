@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { env } from '../config/env.js';
 import { NotFoundError, SheetAccessError } from '../lib/errors.js';
 import { processSpecialValues } from '../utils/special-values.js';
+import * as cache from './cache.service.js';
 
 const auth = new google.auth.JWT({
   email: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -28,7 +29,12 @@ function handleSheetError(error: unknown): never {
 export async function getRows(
   spreadsheetId: string,
   sheetName?: string,
+  cacheTtl = 60,
 ): Promise<SheetRow[]> {
+  const cacheKey = `rows:${spreadsheetId}:${sheetName ?? '_default'}`;
+  const cached = cache.get<SheetRow[]>(cacheKey);
+  if (cached) return cached;
+
   try {
     const range = sheetName ? `'${sheetName}'` : 'Sheet1';
     const response = await sheets.spreadsheets.values.get({
@@ -40,22 +46,38 @@ export async function getRows(
     if (!values || values.length < 2) return [];
 
     const headers = values[0] as string[];
-    return values.slice(1).map((row) => {
+    const rows = values.slice(1).map((row) => {
       const obj: SheetRow = {};
       for (let i = 0; i < headers.length; i++) {
         obj[headers[i]] = row[i] ?? '';
       }
       return obj;
     });
+
+    cache.set(cacheKey, rows, cacheTtl);
+    return rows;
   } catch (error) {
     return handleSheetError(error);
   }
 }
 
+/**
+ * Invalidate cache for a spreadsheet (called after writes).
+ */
+export function invalidateCache(spreadsheetId: string): void {
+  cache.invalidate(`rows:${spreadsheetId}`);
+  cache.invalidate(`cols:${spreadsheetId}`);
+}
+
 export async function getColumnNames(
   spreadsheetId: string,
   sheetName?: string,
+  cacheTtl = 60,
 ): Promise<string[]> {
+  const cacheKey = `cols:${spreadsheetId}:${sheetName ?? '_default'}`;
+  const cached = cache.get<string[]>(cacheKey);
+  if (cached) return cached;
+
   try {
     const range = sheetName ? `'${sheetName}'!1:1` : 'Sheet1!1:1';
     const response = await sheets.spreadsheets.values.get({
@@ -63,7 +85,9 @@ export async function getColumnNames(
       range,
     });
 
-    return (response.data.values?.[0] as string[]) ?? [];
+    const columns = (response.data.values?.[0] as string[]) ?? [];
+    cache.set(cacheKey, columns, cacheTtl);
+    return columns;
   } catch (error) {
     return handleSheetError(error);
   }
@@ -137,6 +161,7 @@ export async function appendRows(
       requestBody: { values },
     });
 
+    invalidateCache(spreadsheetId);
     return rows.length;
   } catch (error) {
     if (error instanceof NotFoundError) throw error;
@@ -203,6 +228,7 @@ export async function updateRows(
       }
     }
 
+    if (updated > 0) invalidateCache(spreadsheetId);
     return updated;
   } catch (error) {
     if (error instanceof NotFoundError) throw error;
@@ -264,6 +290,7 @@ export async function deleteRows(
       requestBody: { requests },
     });
 
+    invalidateCache(spreadsheetId);
     return rowIndicesToDelete.length;
   } catch (error) {
     if (error instanceof NotFoundError) throw error;
@@ -309,6 +336,7 @@ export async function clearAllRows(
       },
     });
 
+    invalidateCache(spreadsheetId);
     return rowCount;
   } catch (error) {
     return handleSheetError(error);

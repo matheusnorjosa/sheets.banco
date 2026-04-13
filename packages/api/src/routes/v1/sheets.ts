@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
+import { buildFilters, filterAnd, filterOr } from '../../utils/query-parser.js';
+import { applyPagination, castNumbers } from '../../utils/pagination.js';
 
 const createBodySchema = z.object({
   data: z.union([
@@ -15,8 +17,21 @@ const updateBodySchema = z.object({
   data: z.record(z.string(), z.string()),
 });
 
-function getSheetApi(request: any) {
-  return request.sheetApi as { spreadsheetId: string; allowRead: boolean; allowCreate: boolean; allowUpdate: boolean; allowDelete: boolean };
+interface SheetApiRecord {
+  spreadsheetId: string;
+  cacheTtlSeconds: number;
+  allowRead: boolean;
+  allowCreate: boolean;
+  allowUpdate: boolean;
+  allowDelete: boolean;
+}
+
+function getSheetApi(request: any): SheetApiRecord {
+  return request.sheetApi as SheetApiRecord;
+}
+
+function getQueryParams(request: any) {
+  return (request.query ?? {}) as Record<string, string>;
 }
 
 export async function sheetsRoutes(app: FastifyInstance) {
@@ -36,28 +51,96 @@ export async function sheetsRoutes(app: FastifyInstance) {
     (request as any).sheetApi = sheetApi;
   });
 
-  // GET /:apiId — return all rows
+  // GET /:apiId — return all rows (with pagination)
   app.get('/:apiId', async (request) => {
     const sheetApi = getSheetApi(request);
-    return sheetsService.getRows(sheetApi.spreadsheetId);
+    const query = getQueryParams(request);
+    const sheetName = query.sheet;
+
+    let rows = await sheetsService.getRows(sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+
+    rows = applyPagination(rows, {
+      limit: query.limit ? Number(query.limit) : undefined,
+      offset: query.offset ? Number(query.offset) : undefined,
+      sort_by: query.sort_by,
+      sort_order: query.sort_order as 'asc' | 'desc' | 'random' | undefined,
+      cast_numbers: query.cast_numbers === 'true',
+    });
+
+    if (query.cast_numbers === 'true') return castNumbers(rows);
+    if (query.single_object === 'true' && rows.length > 0) return rows[0];
+    return rows;
   });
 
   // GET /:apiId/keys — return column names
   app.get('/:apiId/keys', async (request) => {
     const sheetApi = getSheetApi(request);
-    return sheetsService.getColumnNames(sheetApi.spreadsheetId);
+    const query = getQueryParams(request);
+    return sheetsService.getColumnNames(sheetApi.spreadsheetId, query.sheet, sheetApi.cacheTtlSeconds);
   });
 
   // GET /:apiId/count — return row count
   app.get('/:apiId/count', async (request) => {
     const sheetApi = getSheetApi(request);
-    const rows = await sheetsService.getRowCount(sheetApi.spreadsheetId);
+    const query = getQueryParams(request);
+    const rows = await sheetsService.getRowCount(sheetApi.spreadsheetId, query.sheet);
     return { rows };
+  });
+
+  // GET /:apiId/search — AND search
+  app.get('/:apiId/search', async (request) => {
+    const sheetApi = getSheetApi(request);
+    const query = getQueryParams(request);
+    const sheetName = query.sheet;
+    const caseSensitive = query.casesensitive === 'true';
+
+    let rows = await sheetsService.getRows(sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+
+    const filters = buildFilters(query, caseSensitive);
+    rows = filterAnd(rows, filters);
+
+    rows = applyPagination(rows, {
+      limit: query.limit ? Number(query.limit) : undefined,
+      offset: query.offset ? Number(query.offset) : undefined,
+      sort_by: query.sort_by,
+      sort_order: query.sort_order as 'asc' | 'desc' | 'random' | undefined,
+      cast_numbers: query.cast_numbers === 'true',
+    });
+
+    if (query.cast_numbers === 'true') return castNumbers(rows);
+    if (query.single_object === 'true' && rows.length > 0) return rows[0];
+    return rows;
+  });
+
+  // GET /:apiId/search_or — OR search
+  app.get('/:apiId/search_or', async (request) => {
+    const sheetApi = getSheetApi(request);
+    const query = getQueryParams(request);
+    const sheetName = query.sheet;
+    const caseSensitive = query.casesensitive === 'true';
+
+    let rows = await sheetsService.getRows(sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+
+    const filters = buildFilters(query, caseSensitive);
+    rows = filterOr(rows, filters);
+
+    rows = applyPagination(rows, {
+      limit: query.limit ? Number(query.limit) : undefined,
+      offset: query.offset ? Number(query.offset) : undefined,
+      sort_by: query.sort_by,
+      sort_order: query.sort_order as 'asc' | 'desc' | 'random' | undefined,
+      cast_numbers: query.cast_numbers === 'true',
+    });
+
+    if (query.cast_numbers === 'true') return castNumbers(rows);
+    if (query.single_object === 'true' && rows.length > 0) return rows[0];
+    return rows;
   });
 
   // POST /:apiId — create rows
   app.post('/:apiId', async (request, reply) => {
     const sheetApi = getSheetApi(request);
+    const query = getQueryParams(request);
     if (!sheetApi.allowCreate) {
       return reply.status(403).send({
         error: true,
@@ -76,13 +159,14 @@ export async function sheetsRoutes(app: FastifyInstance) {
       ? parsed.data.data
       : [parsed.data.data];
 
-    const created = await sheetsService.appendRows(sheetApi.spreadsheetId, rows);
+    const created = await sheetsService.appendRows(sheetApi.spreadsheetId, rows, query.sheet);
     return reply.status(201).send({ created });
   });
 
   // PATCH /:apiId/:column/:value — update rows matching condition
   app.patch('/:apiId/:column/:value', async (request, reply) => {
     const sheetApi = getSheetApi(request);
+    const query = getQueryParams(request);
     if (!sheetApi.allowUpdate) {
       return reply.status(403).send({
         error: true,
@@ -103,6 +187,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
       column,
       value,
       parsed.data.data,
+      query.sheet,
     );
     return { updated };
   });
@@ -110,6 +195,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // DELETE /:apiId/:column/:value — delete rows matching condition
   app.delete('/:apiId/:column/:value', async (request, reply) => {
     const sheetApi = getSheetApi(request);
+    const query = getQueryParams(request);
     if (!sheetApi.allowDelete) {
       return reply.status(403).send({
         error: true,
@@ -124,6 +210,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
       sheetApi.spreadsheetId,
       column,
       value,
+      query.sheet,
     );
     return { deleted };
   });
@@ -131,6 +218,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // DELETE /:apiId/all — clear all data rows
   app.delete('/:apiId/all', async (request, reply) => {
     const sheetApi = getSheetApi(request);
+    const query = getQueryParams(request);
     if (!sheetApi.allowDelete) {
       return reply.status(403).send({
         error: true,
@@ -140,7 +228,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
       });
     }
 
-    const deleted = await sheetsService.clearAllRows(sheetApi.spreadsheetId);
+    const deleted = await sheetsService.clearAllRows(sheetApi.spreadsheetId, query.sheet);
     return { deleted };
   });
 }
