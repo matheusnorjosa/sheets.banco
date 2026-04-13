@@ -25,6 +25,14 @@ export default function ApisPage() {
   const googleStatus = searchParams.get("google");
 
   useEffect(() => {
+    // Handle Google login: save JWT token from URL
+    const tokenFromUrl = searchParams.get("token");
+    if (tokenFromUrl) {
+      api.setToken(tokenFromUrl);
+      refreshUser();
+      // Clean URL
+      window.history.replaceState({}, "", "/apis?google=connected");
+    }
     if (googleStatus === "connected") {
       refreshUser();
     }

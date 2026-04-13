@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import crypto from 'node:crypto';
 import { google } from 'googleapis';
 import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma.js';
@@ -128,14 +129,31 @@ export async function authRoutes(app: FastifyInstance) {
     };
   });
 
-  // GET /auth/google — redirect user to Google consent screen
+  // GET /auth/google — redirect to Google consent screen
+  // mode=login: sign in/up with Google (no existing account needed)
+  // mode=connect: link Google to existing account (needs JWT token param)
   app.get('/google', async (request, reply) => {
-    // Accept JWT via query param (browser redirect can't send headers)
-    const { token } = request.query as { token?: string };
-    if (!token) {
-      return reply.status(401).send({ error: true, message: 'Token required.', code: 'UNAUTHORIZED', statusCode: 401 });
+    const { token, mode } = request.query as { token?: string; mode?: string };
+
+    const oauth2Client = createOAuth2Client();
+    const scopes = [
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/spreadsheets',
+    ];
+
+    // Login/register with Google (no account needed)
+    if (mode === 'login' || !token) {
+      const url = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        prompt: 'consent',
+        scope: scopes,
+        state: JSON.stringify({ mode: 'login' }),
+      });
+      return reply.redirect(url);
     }
 
+    // Connect Google to existing account
     let sub: string;
     try {
       const decoded = app.jwt.verify<{ sub: string }>(token);
@@ -144,13 +162,11 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: true, message: 'Invalid token.', code: 'UNAUTHORIZED', statusCode: 401 });
     }
 
-    const oauth2Client = createOAuth2Client();
-
     const url = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
-      scope: ['https://www.googleapis.com/auth/spreadsheets'],
-      state: sub, // pass user ID so we know who to link
+      scope: scopes,
+      state: JSON.stringify({ mode: 'connect', userId: sub }),
     });
 
     return reply.redirect(url);
@@ -158,28 +174,78 @@ export async function authRoutes(app: FastifyInstance) {
 
   // GET /auth/google/callback — handle Google OAuth callback
   app.get('/google/callback', async (request, reply) => {
-    const { code, state: userId } = request.query as { code?: string; state?: string };
+    const { code, state: stateRaw } = request.query as { code?: string; state?: string };
 
-    if (!code || !userId) {
-      return reply.redirect(`${env.FRONTEND_URL}/apis?google=error`);
+    if (!code || !stateRaw) {
+      return reply.redirect(`${env.FRONTEND_URL}/login?google=error`);
+    }
+
+    let state: { mode: string; userId?: string };
+    try {
+      state = JSON.parse(stateRaw);
+    } catch {
+      return reply.redirect(`${env.FRONTEND_URL}/login?google=error`);
     }
 
     try {
       const oauth2Client = createOAuth2Client();
       const { tokens } = await oauth2Client.getToken(code);
 
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          googleAccessToken: tokens.access_token ?? undefined,
-          googleRefreshToken: tokens.refresh_token ?? undefined,
-          googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
-        },
-      });
+      if (state.mode === 'connect' && state.userId) {
+        // Link Google to existing user
+        await prisma.user.update({
+          where: { id: state.userId },
+          data: {
+            googleAccessToken: tokens.access_token ?? undefined,
+            googleRefreshToken: tokens.refresh_token ?? undefined,
+            googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
+          },
+        });
+        return reply.redirect(`${env.FRONTEND_URL}/apis?google=connected`);
+      }
 
-      return reply.redirect(`${env.FRONTEND_URL}/apis?google=connected`);
+      // Login/register flow: get user info from Google
+      oauth2Client.setCredentials(tokens);
+      const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+      const { data: profile } = await oauth2.userinfo.get();
+
+      if (!profile.email) {
+        return reply.redirect(`${env.FRONTEND_URL}/login?google=error`);
+      }
+
+      // Find or create user
+      let user = await prisma.user.findUnique({ where: { email: profile.email } });
+
+      if (user) {
+        // Update Google tokens
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            googleAccessToken: tokens.access_token ?? undefined,
+            googleRefreshToken: tokens.refresh_token ?? undefined,
+            googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
+            name: user.name || profile.name || undefined,
+          },
+        });
+      } else {
+        // Create new user (random password since they use Google login)
+        const randomPass = await bcrypt.hash(crypto.randomUUID(), 4);
+        user = await prisma.user.create({
+          data: {
+            email: profile.email,
+            passwordHash: randomPass,
+            name: profile.name || null,
+            googleAccessToken: tokens.access_token ?? undefined,
+            googleRefreshToken: tokens.refresh_token ?? undefined,
+            googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
+          },
+        });
+      }
+
+      const jwt = app.jwt.sign({ sub: user.id, email: user.email });
+      return reply.redirect(`${env.FRONTEND_URL}/apis?token=${jwt}&google=connected`);
     } catch {
-      return reply.redirect(`${env.FRONTEND_URL}/apis?google=error`);
+      return reply.redirect(`${env.FRONTEND_URL}/login?google=error`);
     }
   });
 }
