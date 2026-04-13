@@ -1,7 +1,27 @@
 node_modules/
 dist/
 .env
+.env.*
 *.log
 .DS_Store
 coverage/
 .turbo/
+.next/
+.claude/
+
+# Credentials
+credentials.json
+*.secret*.json
+*service-account*.json
+organizador-agenda-*.json
+client_secret_*.json
+
+# Deploy configs (contain infra details)
+docker-compose.yml
+render.yaml
+railway.toml
+.env.example
+
+# Generated
+packages/web/public/*.svg
+packages/web/src/app/favicon.ico

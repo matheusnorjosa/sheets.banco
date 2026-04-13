@@ -12,7 +12,8 @@ sheets.banco turns your Google Sheets into REST APIs. This guide walks you throu
 ## 1. Clone the repository
 
 ```bash
-git clone https://github.com/matheusnorjosa/sheets.banco.git
+git clone <your-repo-url>
+
 cd sheets.banco
 npm install
 ```
