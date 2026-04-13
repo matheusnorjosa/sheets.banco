@@ -60,7 +60,7 @@ export default function LoginPage() {
           <button
             onClick={handleGoogleLogin}
             disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 bg-white text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-100 disabled:opacity-70 transition-colors"
+            className="w-full flex items-center justify-center gap-3 bg-white text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-200 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 transition-all duration-200 cursor-pointer"
           >
             {googleLoading ? (
               <>
