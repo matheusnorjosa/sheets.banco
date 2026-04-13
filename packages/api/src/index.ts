@@ -1,12 +1,22 @@
 import Fastify from 'fastify';
+import fastifyJwt from '@fastify/jwt';
 import { env } from './config/env.js';
 import { AppError } from './lib/errors.js';
 import { sheetsRoutes } from './routes/v1/sheets.js';
+import { authRoutes } from './routes/auth.js';
+import { dashboardApiRoutes } from './routes/dashboard/apis.js';
+import { registerUsageLogger } from './middleware/usage-logger.js';
 
 const app = Fastify({
   logger: {
     level: env.LOG_LEVEL,
   },
+});
+
+// JWT plugin
+app.register(fastifyJwt, {
+  secret: env.JWT_SECRET,
+  sign: { expiresIn: '24h' },
 });
 
 // Global error handler
@@ -40,7 +50,12 @@ app.setErrorHandler((error: Error, request, reply) => {
   });
 });
 
+// Usage logger for sheet API routes
+registerUsageLogger(app);
+
 // Routes
+app.register(authRoutes, { prefix: '/auth' });
+app.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
 app.register(sheetsRoutes, { prefix: '/api/v1' });
 
 // Health check

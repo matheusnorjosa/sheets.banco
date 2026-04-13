@@ -4,6 +4,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().email(),
   GOOGLE_PRIVATE_KEY: z.string().min(1),
+  JWT_SECRET: z.string().min(16),
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

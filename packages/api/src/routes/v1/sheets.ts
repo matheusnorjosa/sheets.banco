@@ -5,6 +5,7 @@ import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 import { buildFilters, filterAnd, filterOr } from '../../utils/query-parser.js';
 import { applyPagination, castNumbers } from '../../utils/pagination.js';
+import { apiAuth } from '../../middleware/api-auth.js';
 
 const createBodySchema = z.object({
   data: z.union([
@@ -50,6 +51,9 @@ export async function sheetsRoutes(app: FastifyInstance) {
 
     (request as any).sheetApi = sheetApi;
   });
+
+  // Per-API auth (bearer token / basic auth) — only if configured
+  app.addHook('onRequest', apiAuth);
 
   // GET /:apiId — return all rows (with pagination)
   app.get('/:apiId', async (request) => {
