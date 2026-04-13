@@ -1,17 +1,36 @@
 import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
+import helmet from '@fastify/helmet';
+import cors from '@fastify/cors';
 import { env } from './config/env.js';
 import { AppError } from './lib/errors.js';
 import { sheetsRoutes } from './routes/v1/sheets.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboard/apis.js';
 import { registerUsageLogger } from './middleware/usage-logger.js';
+import { registerRateLimiter } from './middleware/rate-limiter.js';
 
 const app = Fastify({
   logger: {
     level: env.LOG_LEVEL,
   },
+  bodyLimit: 1_048_576, // 1MB
+  trustProxy: true,
 });
+
+// Security headers
+app.register(helmet);
+
+// Global CORS for dashboard/auth routes (sheet routes handle CORS per-API)
+app.register(cors, {
+  origin: true,
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+});
+
+// Rate limiter (registered globally, applied per-route)
+registerRateLimiter(app);
 
 // JWT plugin
 app.register(fastifyJwt, {
@@ -27,6 +46,16 @@ app.setErrorHandler((error: Error, request, reply) => {
       message: error.message,
       code: error.code,
       statusCode: error.statusCode,
+    });
+  }
+
+  // Rate limit errors
+  if ('statusCode' in error && (error as any).statusCode === 429) {
+    return reply.status(429).send({
+      error: true,
+      message: 'Too many requests. Please slow down.',
+      code: 'RATE_LIMIT_EXCEEDED',
+      statusCode: 429,
     });
   }
 

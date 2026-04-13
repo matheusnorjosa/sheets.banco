@@ -6,6 +6,9 @@ import * as sheetsService from '../../services/google-sheets.service.js';
 import { buildFilters, filterAnd, filterOr } from '../../utils/query-parser.js';
 import { applyPagination, castNumbers } from '../../utils/pagination.js';
 import { apiAuth } from '../../middleware/api-auth.js';
+import { apiCors } from '../../middleware/cors.js';
+import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
+import { apiRateLimitOptions } from '../../middleware/rate-limiter.js';
 
 const createBodySchema = z.object({
   data: z.union([
@@ -36,6 +39,9 @@ function getQueryParams(request: any) {
 }
 
 export async function sheetsRoutes(app: FastifyInstance) {
+  // Apply per-API rate limiting
+  app.register(import('@fastify/rate-limit'), apiRateLimitOptions() as any);
+
   // Resolve SheetApi from :apiId param
   app.addHook('onRequest', async (request, reply) => {
     const { apiId } = request.params as { apiId?: string };
@@ -52,7 +58,9 @@ export async function sheetsRoutes(app: FastifyInstance) {
     (request as any).sheetApi = sheetApi;
   });
 
-  // Per-API auth (bearer token / basic auth) — only if configured
+  // Per-API security: CORS, IP whitelist, auth
+  app.addHook('onRequest', apiCors);
+  app.addHook('onRequest', apiIpWhitelist);
   app.addHook('onRequest', apiAuth);
 
   // GET /:apiId — return all rows (with pagination)
