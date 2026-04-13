@@ -11,6 +11,7 @@
     "dev:web": "npm run dev -w packages/web",
     "build": "npm run build -w packages/api",
     "build:web": "npm run build -w packages/web",
+    "build:sdk": "npm run build -w packages/sdk",
     "lint": "npm run lint -w packages/api",
     "typecheck": "npm run typecheck -w packages/api",
     "db:generate": "prisma generate",
