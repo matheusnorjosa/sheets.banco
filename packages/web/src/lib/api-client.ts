@@ -120,6 +120,15 @@ class ApiClient {
       `/dashboard/apis/${apiId}/usage?days=${days}`
     );
   }
+
+  async getUsageChart(apiId: string, days = 7) {
+    return this.fetch<{
+      timeline: { date: string; requests: number; avgMs: number }[];
+      methods: { method: string; count: number }[];
+      statuses: { status: string; count: number }[];
+      total: number;
+    }>(`/dashboard/apis/${apiId}/usage/chart?days=${days}`);
+  }
 }
 
 export const api = new ApiClient();

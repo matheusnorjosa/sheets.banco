@@ -18,6 +18,7 @@ import { initWebhookDeliveryWorker, closeWebhookDeliveryWorker } from './workers
 import { importExportRoutes } from './routes/v1/import-export.js';
 import { webhookRoutes } from './routes/dashboard/webhooks.js';
 import { auth2faRoutes } from './routes/auth-2fa.js';
+import { logsStreamRoutes } from './routes/dashboard/logs-stream.js';
 import { flushAuditLog } from './services/audit.service.js';
 
 const app = Fastify({
@@ -103,6 +104,7 @@ app.register(authRoutes, { prefix: '/auth' });
 app.register(auth2faRoutes, { prefix: '/auth' });
 app.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
 app.register(webhookRoutes, { prefix: '/dashboard/apis' });
+app.register(logsStreamRoutes, { prefix: '/dashboard/apis' });
 app.register(sheetsRoutes, { prefix: '/api/v1' });
 app.register(importExportRoutes, { prefix: '/api/v1' });
 

@@ -262,4 +262,51 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
     return { total, days, recent };
   });
+
+  // GET /dashboard/apis/:id/usage/chart — aggregated usage data for charts
+  app.get('/:id/usage/chart', async (request) => {
+    const userId = getUserId(request);
+    const { id } = request.params as { id: string };
+
+    const existing = await prisma.sheetApi.findFirst({ where: { id, userId } });
+    if (!existing) throw new NotFoundError('API not found.');
+
+    const query = (request.query ?? {}) as { days?: string };
+    const days = Number(query.days) || 7;
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const logs = await prisma.usageLog.findMany({
+      where: { sheetApiId: id, createdAt: { gte: since } },
+      select: { method: true, statusCode: true, responseMs: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Aggregate by day
+    const byDay: Record<string, { count: number; totalMs: number }> = {};
+    const byMethod: Record<string, number> = {};
+    const byStatus: Record<string, number> = {};
+
+    for (const log of logs) {
+      const day = log.createdAt.toISOString().split('T')[0];
+      if (!byDay[day]) byDay[day] = { count: 0, totalMs: 0 };
+      byDay[day].count++;
+      byDay[day].totalMs += log.responseMs;
+
+      byMethod[log.method] = (byMethod[log.method] || 0) + 1;
+
+      const statusGroup = `${Math.floor(log.statusCode / 100)}xx`;
+      byStatus[statusGroup] = (byStatus[statusGroup] || 0) + 1;
+    }
+
+    const timeline = Object.entries(byDay).map(([date, data]) => ({
+      date,
+      requests: data.count,
+      avgMs: Math.round(data.totalMs / data.count),
+    }));
+
+    const methods = Object.entries(byMethod).map(([method, count]) => ({ method, count }));
+    const statuses = Object.entries(byStatus).map(([status, count]) => ({ status, count }));
+
+    return { timeline, methods, statuses, total: logs.length };
+  });
 }

@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
-type Tab = "overview" | "settings" | "keys" | "usage";
+type Tab = "overview" | "settings" | "keys" | "usage" | "playground";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -36,6 +37,7 @@ export default function ApiDetailPage() {
     { key: "settings", label: "Settings" },
     { key: "keys", label: "API Keys" },
     { key: "usage", label: "Usage" },
+    { key: "playground", label: "Playground" },
   ];
 
   const handleDelete = async () => {
@@ -86,6 +88,7 @@ export default function ApiDetailPage() {
       {tab === "settings" && <SettingsTab sheetApi={sheetApi} onUpdate={reload} />}
       {tab === "keys" && <KeysTab sheetApi={sheetApi} onUpdate={reload} />}
       {tab === "usage" && <UsageTab apiId={id} />}
+      {tab === "playground" && <PlaygroundTab endpoint={endpoint} />}
     </div>
   );
 }
@@ -99,13 +102,16 @@ function OverviewTab({ endpoint, sheetApi }: { endpoint: string; sheetApi: any }
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const curlGet = `curl ${endpoint}`;
-  const curlPost = `curl -X POST ${endpoint} \\
-  -H "Content-Type: application/json" \\
-  -d '{"data": {"column": "value"}}'`;
-  const jsSnippet = `const res = await fetch("${endpoint}");
-const data = await res.json();
-console.log(data);`;
+  const [snippetLang, setSnippetLang] = useState("curl");
+
+  const snippets: Record<string, { label: string; code: string }> = {
+    curl: { label: "cURL", code: `# Read all rows\ncurl ${endpoint}\n\n# Create a row\ncurl -X POST ${endpoint} \\\n  -H "Content-Type: application/json" \\\n  -d '{"data": {"column": "value"}}'` },
+    javascript: { label: "JavaScript", code: `const res = await fetch("${endpoint}");\nconst data = await res.json();\nconsole.log(data);\n\n// Create a row\nawait fetch("${endpoint}?sync=true", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify({ data: { column: "value" } }),\n});` },
+    python: { label: "Python", code: `import requests\n\n# Read all rows\nres = requests.get("${endpoint}")\ndata = res.json()\nprint(data)\n\n# Create a row\nrequests.post("${endpoint}?sync=true",\n  json={"data": {"column": "value"}})` },
+    php: { label: "PHP", code: `<?php\n// Read all rows\n$data = json_decode(file_get_contents("${endpoint}"), true);\nprint_r($data);\n\n// Create a row\n$ch = curl_init("${endpoint}?sync=true");\ncurl_setopt($ch, CURLOPT_POST, true);\ncurl_setopt($ch, CURLOPT_HTTPHEADER, ["Content-Type: application/json"]);\ncurl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(["data" => ["column" => "value"]]));\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\n$res = curl_exec($ch);` },
+    ruby: { label: "Ruby", code: `require "net/http"\nrequire "json"\n\n# Read all rows\nuri = URI("${endpoint}")\nres = Net::HTTP.get(uri)\ndata = JSON.parse(res)\nputs data` },
+    go: { label: "Go", code: `package main\n\nimport (\n  "fmt"\n  "io"\n  "net/http"\n)\n\nfunc main() {\n  res, _ := http.Get("${endpoint}")\n  body, _ := io.ReadAll(res.Body)\n  fmt.Println(string(body))\n}` },
+  };
 
   return (
     <div className="space-y-6">
@@ -126,26 +132,17 @@ console.log(data);`;
 
       <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
         <h2 className="font-semibold text-white mb-3">Quick Start</h2>
-        <div className="space-y-4">
-          <div>
-            <p className="text-xs text-gray-500 mb-1.5 font-medium">GET — Read all rows</p>
-            <pre className="bg-[#0f0f23] text-green-400 p-3 rounded-lg text-xs overflow-x-auto border border-[#2a2a4a]">
-              {curlGet}
-            </pre>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-1.5 font-medium">POST — Create a row</p>
-            <pre className="bg-[#0f0f23] text-green-400 p-3 rounded-lg text-xs overflow-x-auto border border-[#2a2a4a]">
-              {curlPost}
-            </pre>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-1.5 font-medium">JavaScript</p>
-            <pre className="bg-[#0f0f23] text-green-400 p-3 rounded-lg text-xs overflow-x-auto border border-[#2a2a4a]">
-              {jsSnippet}
-            </pre>
-          </div>
+        <div className="flex gap-1 mb-3 flex-wrap">
+          {Object.entries(snippets).map(([key, { label }]) => (
+            <button key={key} onClick={() => setSnippetLang(key)}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${snippetLang === key ? "bg-[#4f46e5] text-white" : "bg-[#2a2a4a] text-gray-400 hover:text-white"}`}>
+              {label}
+            </button>
+          ))}
         </div>
+        <pre className="bg-[#0f0f23] text-green-400 p-3 rounded-lg text-xs overflow-x-auto border border-[#2a2a4a] whitespace-pre">
+          {snippets[snippetLang].code}
+        </pre>
       </div>
 
       <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
@@ -311,29 +308,107 @@ function KeysTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => void }
   );
 }
 
+const CHART_COLORS = ["#4f46e5", "#22c55e", "#eab308", "#ef4444", "#06b6d4", "#f97316"];
+
 function UsageTab({ apiId }: { apiId: string }) {
   const [usage, setUsage] = useState<any>(null);
+  const [chart, setChart] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState(7);
 
   useEffect(() => {
-    api.getUsage(apiId).then(setUsage).finally(() => setLoading(false));
-  }, [apiId]);
+    setLoading(true);
+    Promise.all([api.getUsage(apiId, days), api.getUsageChart(apiId, days)])
+      .then(([u, c]) => { setUsage(u); setChart(c); })
+      .finally(() => setLoading(false));
+  }, [apiId, days]);
 
   if (loading) return <div className="text-gray-400">Loading usage...</div>;
   if (!usage) return <div className="text-gray-500">No data.</div>;
 
   return (
     <div className="space-y-4">
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-        <h2 className="font-semibold text-white mb-2">Total Requests</h2>
-        <p className="text-3xl font-bold text-white">{usage.total}</p>
-        <p className="text-xs text-gray-500 mt-1">
-          Showing last {usage.days} days ({usage.recent.length} recent)
-        </p>
+      {/* Period selector */}
+      <div className="flex gap-2">
+        {[1, 7, 30].map((d) => (
+          <button key={d} onClick={() => setDays(d)}
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${days === d ? "bg-[#4f46e5] text-white" : "bg-[#2a2a4a] text-gray-400 hover:text-white"}`}>
+            {d === 1 ? "24h" : `${d}d`}
+          </button>
+        ))}
       </div>
 
+      {/* Stats cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+          <p className="text-sm text-gray-500 mb-1">Total Requests</p>
+          <p className="text-3xl font-bold text-white">{usage.total}</p>
+        </div>
+        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+          <p className="text-sm text-gray-500 mb-1">Period Requests</p>
+          <p className="text-3xl font-bold text-white">{chart?.total ?? 0}</p>
+        </div>
+        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+          <p className="text-sm text-gray-500 mb-1">Avg Response</p>
+          <p className="text-3xl font-bold text-white">
+            {chart?.timeline?.length ? Math.round(chart.timeline.reduce((s: number, t: any) => s + t.avgMs, 0) / chart.timeline.length) : 0}ms
+          </p>
+        </div>
+      </div>
+
+      {/* Timeline chart */}
+      {chart?.timeline?.length > 0 && (
+        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+          <h2 className="font-semibold text-white mb-4">Requests over time</h2>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={chart.timeline}>
+              <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} />
+              <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} width={40} />
+              <Tooltip contentStyle={{ background: "#0f0f23", border: "1px solid #2a2a4a", borderRadius: 8, color: "#fff", fontSize: 12 }} />
+              <Area type="monotone" dataKey="requests" stroke="#4f46e5" fill="#4f46e5" fillOpacity={0.2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Methods + Status charts */}
+      {(chart?.methods?.length > 0 || chart?.statuses?.length > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {chart?.methods?.length > 0 && (
+            <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+              <h2 className="font-semibold text-white mb-4">By Method</h2>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={chart.methods}>
+                  <XAxis dataKey="method" tick={{ fill: "#6b7280", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} width={40} />
+                  <Tooltip contentStyle={{ background: "#0f0f23", border: "1px solid #2a2a4a", borderRadius: 8, color: "#fff", fontSize: 12 }} />
+                  <Bar dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          {chart?.statuses?.length > 0 && (
+            <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+              <h2 className="font-semibold text-white mb-4">By Status</h2>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie data={chart.statuses} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={65} label={(e: any) => `${e.status}: ${e.count}`}>
+                    {chart.statuses.map((_: any, i: number) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: "#0f0f23", border: "1px solid #2a2a4a", borderRadius: 8, color: "#fff", fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Recent requests table */}
       {usage.recent.length > 0 && (
         <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg overflow-hidden">
+          <h2 className="font-semibold text-white px-4 py-3 border-b border-[#2a2a4a]">Recent Requests</h2>
           <table className="w-full text-sm">
             <thead className="bg-[#0f0f23] text-gray-500 text-xs">
               <tr>
@@ -360,6 +435,113 @@ function UsageTab({ apiId }: { apiId: string }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlaygroundTab({ endpoint }: { endpoint: string }) {
+  const [method, setMethod] = useState("GET");
+  const [path, setPath] = useState("");
+  const [body, setBody] = useState('{\n  "data": {\n    "column": "value"\n  }\n}');
+  const [headers, setHeaders] = useState("");
+  const [response, setResponse] = useState<{ status: number; body: string; time: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSend = async () => {
+    setLoading(true);
+    setResponse(null);
+    const url = `${endpoint}${path}`;
+    const start = performance.now();
+
+    try {
+      const opts: RequestInit = {
+        method,
+        headers: { "Content-Type": "application/json" },
+      };
+
+      // Parse custom headers
+      if (headers.trim()) {
+        for (const line of headers.split("\n")) {
+          const [k, ...v] = line.split(":");
+          if (k && v.length) {
+            (opts.headers as Record<string, string>)[k.trim()] = v.join(":").trim();
+          }
+        }
+      }
+
+      if (method !== "GET" && method !== "DELETE" && body.trim()) {
+        opts.body = body;
+      }
+
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      const elapsed = Math.round(performance.now() - start);
+
+      let formatted = text;
+      try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+
+      setResponse({ status: res.status, body: formatted, time: elapsed });
+    } catch (err: any) {
+      setResponse({ status: 0, body: err.message, time: Math.round(performance.now() - start) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+        <h2 className="font-semibold text-white mb-4">API Playground</h2>
+
+        {/* Method + Path */}
+        <div className="flex gap-2 mb-3">
+          <select value={method} onChange={(e) => setMethod(e.target.value)}
+            className="bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200">
+            {["GET", "POST", "PATCH", "DELETE"].map((m) => <option key={m}>{m}</option>)}
+          </select>
+          <div className="flex-1 flex items-center bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3">
+            <span className="text-xs text-gray-500 mr-1 truncate">{endpoint}</span>
+            <input type="text" value={path} onChange={(e) => setPath(e.target.value)}
+              className="flex-1 bg-transparent py-2 text-sm text-gray-200 focus:outline-none" placeholder="/search?name=Alice" />
+          </div>
+          <button onClick={handleSend} disabled={loading}
+            className="bg-[#4f46e5] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+            {loading ? "..." : "Send"}
+          </button>
+        </div>
+
+        {/* Headers */}
+        <div className="mb-3">
+          <label className="block text-xs text-gray-500 mb-1">Headers (one per line, Key: Value)</label>
+          <textarea value={headers} onChange={(e) => setHeaders(e.target.value)} rows={2}
+            className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-xs text-gray-300 font-mono focus:outline-none focus:border-[#4f46e5]"
+            placeholder="Authorization: Bearer token123" />
+        </div>
+
+        {/* Body */}
+        {method !== "GET" && (
+          <div className="mb-3">
+            <label className="block text-xs text-gray-500 mb-1">Body (JSON)</label>
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5}
+              className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-xs text-gray-300 font-mono focus:outline-none focus:border-[#4f46e5]" />
+          </div>
+        )}
+      </div>
+
+      {/* Response */}
+      {response && (
+        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <span className={`text-sm font-bold ${response.status >= 200 && response.status < 400 ? "text-green-400" : "text-red-400"}`}>
+              {response.status || "Error"}
+            </span>
+            <span className="text-xs text-gray-500">{response.time}ms</span>
+          </div>
+          <pre className="bg-[#0f0f23] border border-[#2a2a4a] rounded-lg p-3 text-xs text-gray-300 font-mono overflow-x-auto max-h-[400px] overflow-y-auto">
+            {response.body}
+          </pre>
         </div>
       )}
     </div>
