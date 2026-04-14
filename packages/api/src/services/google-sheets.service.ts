@@ -3,51 +3,25 @@ import { env } from '../config/env.js';
 import { NotFoundError, SheetAccessError, AppError } from '../lib/errors.js';
 import { processSpecialValues } from '../utils/special-values.js';
 import * as cache from './cache.service.js';
-import { prisma } from '../lib/prisma.js';
+import { getOAuthClient } from './oauth-pool.service.js';
 
 export interface SheetRow {
   [key: string]: string;
 }
 
 async function getSheetsClient(userId: string): Promise<sheets_v4.Sheets> {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user?.googleAccessToken || !user?.googleRefreshToken) {
-    throw new AppError(403, 'GOOGLE_NOT_CONNECTED', 'Google account not connected. Please authorize Google access.');
-  }
-
-  const oauth2Client = new google.auth.OAuth2(
-    env.GOOGLE_CLIENT_ID,
-    env.GOOGLE_CLIENT_SECRET,
-    env.GOOGLE_REDIRECT_URI,
-  );
-
-  oauth2Client.setCredentials({
-    access_token: user.googleAccessToken,
-    refresh_token: user.googleRefreshToken,
-    expiry_date: user.googleTokenExpiry?.getTime(),
-  });
-
-  oauth2Client.on('tokens', async (tokens) => {
-    const update: any = {};
-    if (tokens.access_token) update.googleAccessToken = tokens.access_token;
-    if (tokens.refresh_token) update.googleRefreshToken = tokens.refresh_token;
-    if (tokens.expiry_date) update.googleTokenExpiry = new Date(tokens.expiry_date);
-    if (Object.keys(update).length > 0) {
-      await prisma.user.update({ where: { id: userId }, data: update });
-    }
-  });
-
+  const oauth2Client = await getOAuthClient(userId);
   return google.sheets({ version: 'v4', auth: oauth2Client });
 }
 
 /**
- * Resolve the sheet tab name. If not provided, fetches the first tab name from the spreadsheet.
+ * Resolve the sheet tab name. If not provided, fetches the first tab name.
  */
 async function resolveSheetName(userId: string, spreadsheetId: string, sheetName?: string): Promise<string> {
   if (sheetName) return sheetName;
 
   const cacheKey = `firstTab:${spreadsheetId}`;
-  const cached = cache.get<string>(cacheKey);
+  const cached = await cache.get<string>(cacheKey);
   if (cached) return cached;
 
   const sheets = await getSheetsClient(userId);
@@ -58,7 +32,7 @@ async function resolveSheetName(userId: string, spreadsheetId: string, sheetName
   const firstSheet = response.data.sheets?.[0]?.properties?.title;
   if (!firstSheet) throw new NotFoundError('Spreadsheet has no sheets.');
 
-  cache.set(cacheKey, firstSheet, 300); // cache for 5 min
+  await cache.set(cacheKey, firstSheet, 300);
   return firstSheet;
 }
 
@@ -80,7 +54,7 @@ export async function getRows(
   cacheTtl = 60,
 ): Promise<SheetRow[]> {
   const cacheKey = `rows:${spreadsheetId}:${sheetName ?? '_default'}`;
-  const cached = cache.get<SheetRow[]>(cacheKey);
+  const cached = await cache.get<SheetRow[]>(cacheKey);
   if (cached) return cached;
 
   try {
@@ -103,16 +77,16 @@ export async function getRows(
       return obj;
     });
 
-    cache.set(cacheKey, rows, cacheTtl);
+    await cache.set(cacheKey, rows, cacheTtl);
     return rows;
   } catch (error) {
     return handleSheetError(error);
   }
 }
 
-export function invalidateCache(spreadsheetId: string): void {
-  cache.invalidate(`rows:${spreadsheetId}`);
-  cache.invalidate(`cols:${spreadsheetId}`);
+export async function invalidateCache(spreadsheetId: string): Promise<void> {
+  await cache.invalidate(`rows:${spreadsheetId}`);
+  await cache.invalidate(`cols:${spreadsheetId}`);
 }
 
 export async function getColumnNames(
@@ -122,7 +96,7 @@ export async function getColumnNames(
   cacheTtl = 60,
 ): Promise<string[]> {
   const cacheKey = `cols:${spreadsheetId}:${sheetName ?? '_default'}`;
-  const cached = cache.get<string[]>(cacheKey);
+  const cached = await cache.get<string[]>(cacheKey);
   if (cached) return cached;
 
   try {
@@ -134,7 +108,7 @@ export async function getColumnNames(
     });
 
     const columns = (response.data.values?.[0] as string[]) ?? [];
-    cache.set(cacheKey, columns, cacheTtl);
+    await cache.set(cacheKey, columns, cacheTtl);
     return columns;
   } catch (error) {
     return handleSheetError(error);
@@ -208,7 +182,7 @@ export async function appendRows(
       requestBody: { values },
     });
 
-    invalidateCache(spreadsheetId);
+    await invalidateCache(spreadsheetId);
     return rows.length;
   } catch (error) {
     if (error instanceof NotFoundError) throw error;
@@ -263,7 +237,7 @@ export async function updateRows(
       }
     }
 
-    if (updated > 0) invalidateCache(spreadsheetId);
+    if (updated > 0) await invalidateCache(spreadsheetId);
     return updated;
   } catch (error) {
     if (error instanceof NotFoundError) throw error;
@@ -322,7 +296,7 @@ export async function deleteRows(
       requestBody: { requests },
     });
 
-    invalidateCache(spreadsheetId);
+    await invalidateCache(spreadsheetId);
     return rowIndicesToDelete.length;
   } catch (error) {
     if (error instanceof NotFoundError) throw error;
@@ -367,7 +341,7 @@ export async function clearAllRows(
       },
     });
 
-    invalidateCache(spreadsheetId);
+    await invalidateCache(spreadsheetId);
     return rowCount;
   } catch (error) {
     return handleSheetError(error);

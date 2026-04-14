@@ -9,6 +9,7 @@ import { apiAuth } from '../../middleware/api-auth.js';
 import { apiCors } from '../../middleware/cors.js';
 import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
 import { apiRateLimitOptions } from '../../middleware/rate-limiter.js';
+import { enqueueWrite } from '../../queues/sheets-write.queue.js';
 
 const createBodySchema = z.object({
   data: z.union([
@@ -186,8 +187,21 @@ export async function sheetsRoutes(app: FastifyInstance) {
       ? parsed.data.data
       : [parsed.data.data];
 
-    const created = await sheetsService.appendRows(userId, sheetApi.spreadsheetId, rows, query.sheet);
-    return reply.status(201).send({ created });
+    // Sync mode: execute immediately
+    if (query.sync === 'true') {
+      const created = await sheetsService.appendRows(userId, sheetApi.spreadsheetId, rows, query.sheet);
+      return reply.status(201).send({ created });
+    }
+
+    // Async mode: enqueue via BullMQ
+    const jobId = await enqueueWrite({
+      type: 'append',
+      userId,
+      spreadsheetId: sheetApi.spreadsheetId,
+      sheetName: query.sheet,
+      rows,
+    });
+    return reply.status(202).send({ queued: true, jobId });
   });
 
   // PATCH /:apiId/:column/:value — update rows matching condition
@@ -210,15 +224,21 @@ export async function sheetsRoutes(app: FastifyInstance) {
       throw new ValidationError('Request body must have a "data" field with an object.');
     }
 
-    const updated = await sheetsService.updateRows(
+    if (query.sync === 'true') {
+      const updated = await sheetsService.updateRows(userId, sheetApi.spreadsheetId, column, value, parsed.data.data, query.sheet);
+      return { updated };
+    }
+
+    const jobId = await enqueueWrite({
+      type: 'update',
       userId,
-      sheetApi.spreadsheetId,
+      spreadsheetId: sheetApi.spreadsheetId,
+      sheetName: query.sheet,
       column,
       value,
-      parsed.data.data,
-      query.sheet,
-    );
-    return { updated };
+      data: parsed.data.data,
+    });
+    return reply.status(202).send({ queued: true, jobId });
   });
 
   // DELETE /:apiId/:column/:value — delete rows matching condition
@@ -236,14 +256,21 @@ export async function sheetsRoutes(app: FastifyInstance) {
     }
 
     const { column, value } = request.params as { column: string; value: string };
-    const deleted = await sheetsService.deleteRows(
+
+    if (query.sync === 'true') {
+      const deleted = await sheetsService.deleteRows(userId, sheetApi.spreadsheetId, column, value, query.sheet);
+      return { deleted };
+    }
+
+    const jobId = await enqueueWrite({
+      type: 'delete',
       userId,
-      sheetApi.spreadsheetId,
+      spreadsheetId: sheetApi.spreadsheetId,
+      sheetName: query.sheet,
       column,
       value,
-      query.sheet,
-    );
-    return { deleted };
+    });
+    return reply.status(202).send({ queued: true, jobId });
   });
 
   // DELETE /:apiId/all — clear all data rows
@@ -260,7 +287,17 @@ export async function sheetsRoutes(app: FastifyInstance) {
       });
     }
 
-    const deleted = await sheetsService.clearAllRows(userId, sheetApi.spreadsheetId, query.sheet);
-    return { deleted };
+    if (query.sync === 'true') {
+      const deleted = await sheetsService.clearAllRows(userId, sheetApi.spreadsheetId, query.sheet);
+      return { deleted };
+    }
+
+    const jobId = await enqueueWrite({
+      type: 'clear',
+      userId,
+      spreadsheetId: sheetApi.spreadsheetId,
+      sheetName: query.sheet,
+    });
+    return reply.status(202).send({ queued: true, jobId });
   });
 }

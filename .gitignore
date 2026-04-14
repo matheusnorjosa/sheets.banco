@@ -22,6 +22,9 @@ render.yaml
 railway.toml
 .env.example
 
+# Docs (internal plans, not for GitHub)
+docs/
+
 # Generated
 packages/web/public/*.svg
 packages/web/src/app/favicon.ico

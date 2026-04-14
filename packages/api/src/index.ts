@@ -9,6 +9,10 @@ import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboard/apis.js';
 import { registerUsageLogger } from './middleware/usage-logger.js';
 import { registerRateLimiter } from './middleware/rate-limiter.js';
+import redisPlugin from './plugins/redis.js';
+import { initCache } from './services/cache.service.js';
+import { initSheetsWriteQueue } from './queues/sheets-write.queue.js';
+import { initSheetsWriteWorker, closeSheetsWriteWorker } from './workers/sheets-write.worker.js';
 
 const app = Fastify({
   logger: {
@@ -17,6 +21,9 @@ const app = Fastify({
   bodyLimit: 1_048_576, // 1MB
   trustProxy: true,
 });
+
+// Redis plugin
+app.register(redisPlugin);
 
 // Security headers (relaxed CSP since frontend is separate)
 app.register(helmet, {
@@ -93,9 +100,24 @@ app.register(sheetsRoutes, { prefix: '/api/v1' });
 // Health check
 app.get('/health', async () => ({ status: 'ok' }));
 
+// Graceful shutdown
+app.addHook('onClose', async () => {
+  await closeSheetsWriteWorker();
+});
+
 // Start
 const start = async () => {
   try {
+    await app.ready();
+
+    // Initialize Redis-backed cache after plugin is registered
+    initCache(app.redis);
+
+    // Initialize BullMQ queue and worker
+    initSheetsWriteQueue(env.REDIS_URL);
+    initSheetsWriteWorker(env.REDIS_URL);
+    app.log.info('BullMQ sheets-write queue and worker started');
+
     await app.listen({ port: env.PORT, host: env.HOST });
     app.log.info(`sheets.banco API running on http://${env.HOST}:${env.PORT}`);
   } catch (err) {

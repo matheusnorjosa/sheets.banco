@@ -1,37 +1,62 @@
-interface CacheEntry<T> {
-  data: T;
-  expiresAt: number;
+import type IORedis from 'ioredis';
+
+let redis: InstanceType<typeof import('ioredis').default> | null = null;
+
+/**
+ * Initialize cache with a Redis connection.
+ * Must be called after the Redis plugin is registered.
+ */
+export function initCache(redisInstance: any): void {
+  redis = redisInstance;
 }
 
-const store = new Map<string, CacheEntry<unknown>>();
+export async function get<T>(key: string): Promise<T | undefined> {
+  if (!redis) return undefined;
 
-export function get<T>(key: string): T | undefined {
-  const entry = store.get(key);
-  if (!entry) return undefined;
-
-  if (Date.now() > entry.expiresAt) {
-    store.delete(key);
+  try {
+    const data = await redis.get(key);
+    if (!data) return undefined;
+    return JSON.parse(data) as T;
+  } catch {
     return undefined;
   }
-
-  return entry.data as T;
 }
 
-export function set<T>(key: string, data: T, ttlSeconds: number): void {
-  store.set(key, {
-    data,
-    expiresAt: Date.now() + ttlSeconds * 1000,
-  });
-}
+export async function set<T>(key: string, data: T, ttlSeconds: number): Promise<void> {
+  if (!redis) return;
 
-export function invalidate(prefix: string): void {
-  for (const key of store.keys()) {
-    if (key.startsWith(prefix)) {
-      store.delete(key);
-    }
+  try {
+    await redis.setex(key, ttlSeconds, JSON.stringify(data));
+  } catch {
+    // Silently fail — cache is best-effort
   }
 }
 
-export function clear(): void {
-  store.clear();
+export async function invalidate(prefix: string): Promise<void> {
+  if (!redis) return;
+
+  try {
+    const stream = redis.scanStream({ match: `${prefix}*`, count: 100 });
+    const keys: string[] = [];
+
+    for await (const batch of stream) {
+      keys.push(...(batch as string[]));
+    }
+
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+  } catch {
+    // Silently fail
+  }
+}
+
+export async function del(key: string): Promise<void> {
+  if (!redis) return;
+
+  try {
+    await redis.del(key);
+  } catch {
+    // Silently fail
+  }
 }
