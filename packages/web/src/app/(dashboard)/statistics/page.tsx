@@ -27,32 +27,21 @@ export default function StatisticsPage() {
       <h1 className="text-2xl font-bold text-white mb-1">Statistics and usage</h1>
       <p className="text-gray-500 text-sm mb-6">For all your APIs.</p>
 
-      <div className="grid gap-4 sm:grid-cols-2 mb-6">
+      <div className="grid gap-4 sm:grid-cols-3 mb-6">
         <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-6">
-          <h2 className="font-semibold text-white mb-3">Usage in this month</h2>
-          <div className="w-full bg-[#2a2a4a] rounded-full h-2 mb-3">
-            <div
-              className="bg-[#4f46e5] h-2 rounded-full transition-all"
-              style={{ width: `${Math.min((totalRequests / 500) * 100, 100)}%` }}
-            />
-          </div>
-          <p className="text-sm text-gray-400">
-            Current usage: <span className="text-white font-medium">{totalRequests}</span> requests.{" "}
-            <span className="text-green-400">({Math.round((totalRequests / 500) * 100)}%)</span>
-          </p>
+          <p className="text-sm text-gray-500 mb-1">Total Requests</p>
+          <p className="text-3xl font-bold text-white">{totalRequests.toLocaleString()}</p>
         </div>
 
         <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-6">
-          <h2 className="font-semibold text-white mb-3">Spreadsheet APIs</h2>
-          <div className="w-full bg-[#2a2a4a] rounded-full h-2 mb-3">
-            <div
-              className="bg-[#4f46e5] h-2 rounded-full transition-all"
-              style={{ width: `${Math.min((apis.length / 10) * 100, 100)}%` }}
-            />
-          </div>
-          <p className="text-sm text-gray-400">
-            You have <span className="text-white font-medium">{apis.length}</span> spreadsheet APIs.{" "}
-            <span className="text-green-400">({Math.round((apis.length / 10) * 100)}%)</span>
+          <p className="text-sm text-gray-500 mb-1">Spreadsheet APIs</p>
+          <p className="text-3xl font-bold text-white">{apis.length}</p>
+        </div>
+
+        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-6">
+          <p className="text-sm text-gray-500 mb-1">API Keys</p>
+          <p className="text-3xl font-bold text-white">
+            {apis.reduce((sum, a) => sum + (a._count?.apiKeys ?? 0), 0)}
           </p>
         </div>
       </div>
