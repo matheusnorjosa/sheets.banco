@@ -13,6 +13,10 @@ import redisPlugin from './plugins/redis.js';
 import { initCache } from './services/cache.service.js';
 import { initSheetsWriteQueue } from './queues/sheets-write.queue.js';
 import { initSheetsWriteWorker, closeSheetsWriteWorker } from './workers/sheets-write.worker.js';
+import { initWebhookDeliveryQueue } from './queues/webhook-delivery.queue.js';
+import { initWebhookDeliveryWorker, closeWebhookDeliveryWorker } from './workers/webhook-delivery.worker.js';
+import { importExportRoutes } from './routes/v1/import-export.js';
+import { webhookRoutes } from './routes/dashboard/webhooks.js';
 
 const app = Fastify({
   logger: {
@@ -95,7 +99,9 @@ registerUsageLogger(app);
 // Routes
 app.register(authRoutes, { prefix: '/auth' });
 app.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
+app.register(webhookRoutes, { prefix: '/dashboard/apis' });
 app.register(sheetsRoutes, { prefix: '/api/v1' });
+app.register(importExportRoutes, { prefix: '/api/v1' });
 
 // Health check
 app.get('/health', async () => ({ status: 'ok' }));
@@ -103,6 +109,7 @@ app.get('/health', async () => ({ status: 'ok' }));
 // Graceful shutdown
 app.addHook('onClose', async () => {
   await closeSheetsWriteWorker();
+  await closeWebhookDeliveryWorker();
 });
 
 // Start
@@ -116,7 +123,9 @@ const start = async () => {
     // Initialize BullMQ queue and worker
     initSheetsWriteQueue(env.REDIS_URL);
     initSheetsWriteWorker(env.REDIS_URL);
-    app.log.info('BullMQ sheets-write queue and worker started');
+    initWebhookDeliveryQueue(env.REDIS_URL);
+    initWebhookDeliveryWorker(env.REDIS_URL);
+    app.log.info('BullMQ queues and workers started');
 
     await app.listen({ port: env.PORT, host: env.HOST });
     app.log.info(`sheets.banco API running on http://${env.HOST}:${env.PORT}`);

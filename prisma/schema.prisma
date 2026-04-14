@@ -27,6 +27,7 @@ model SheetApi {
   id            String   @id @default(cuid())
   name          String
   spreadsheetId String
+  slug          String?  @unique // custom endpoint e.g. "products"
 
   // Owner
   userId String?
@@ -54,8 +55,9 @@ model SheetApi {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  apiKeys   ApiKey[]
-  usageLogs UsageLog[]
+  apiKeys              ApiKey[]
+  usageLogs            UsageLog[]
+  webhookSubscriptions WebhookSubscription[]
 }
 
 model ApiKey {
@@ -80,4 +82,31 @@ model UsageLog {
   createdAt  DateTime @default(now())
 
   @@index([sheetApiId, createdAt])
+}
+
+model WebhookSubscription {
+  id         String   @id @default(cuid())
+  sheetApiId String
+  sheetApi   SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
+  url        String
+  secret     String
+  events     String[] // "row.created", "row.updated", "row.deleted", "rows.cleared"
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  deliveries WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  subscription   WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  event          String
+  payload        Json
+  status         String   @default("pending") // pending, success, failed
+  attempts       Int      @default(0)
+  responseCode   Int?
+  createdAt      DateTime @default(now())
+
+  @@index([subscriptionId, createdAt])
 }

@@ -6,13 +6,17 @@ import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 
+const slugRegex = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
+
 const createApiSchema = z.object({
   name: z.string().min(1),
   spreadsheetUrl: z.string().min(1),
+  slug: z.string().regex(slugRegex, 'Slug must be 3-50 chars, lowercase, letters/numbers/hyphens').optional(),
 });
 
 const updateApiSchema = z.object({
   name: z.string().min(1).optional(),
+  slug: z.string().regex(slugRegex, 'Slug must be 3-50 chars, lowercase, letters/numbers/hyphens').nullable().optional(),
   allowRead: z.boolean().optional(),
   allowCreate: z.boolean().optional(),
   allowUpdate: z.boolean().optional(),
@@ -89,6 +93,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       data: {
         name: parsed.data.name,
         spreadsheetId,
+        slug: parsed.data.slug ?? null,
         userId,
       },
     });

@@ -52,17 +52,19 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // Apply per-API rate limiting
   app.register(import('@fastify/rate-limit'), apiRateLimitOptions() as any);
 
-  // Resolve SheetApi from :apiId param
+  // Resolve SheetApi from :apiId param (supports both ID and slug)
   app.addHook('onRequest', async (request, reply) => {
     const { apiId } = request.params as { apiId?: string };
     if (!apiId) return;
 
-    const sheetApi = await prisma.sheetApi.findUnique({
-      where: { id: apiId },
-    });
+    // Try by ID first, then by slug
+    let sheetApi = await prisma.sheetApi.findUnique({ where: { id: apiId } });
+    if (!sheetApi) {
+      sheetApi = await prisma.sheetApi.findUnique({ where: { slug: apiId } });
+    }
 
     if (!sheetApi) {
-      throw new NotFoundError('API not found. Check your API ID.');
+      throw new NotFoundError('API not found. Check your API ID or slug.');
     }
 
     (request as any).sheetApi = sheetApi;
@@ -162,6 +164,94 @@ export async function sheetsRoutes(app: FastifyInstance) {
     if (query.cast_numbers === 'true') return castNumbers(rows);
     if (query.single_object === 'true' && rows.length > 0) return rows[0];
     return rows;
+  });
+
+  // POST /:apiId/batch/update — batch update with filters
+  app.post('/:apiId/batch/update', async (request, reply) => {
+    const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
+    const query = getQueryParams(request);
+    if (!sheetApi.allowUpdate) {
+      return reply.status(403).send({ error: true, message: 'Updating disabled.', code: 'UPDATE_DISABLED', statusCode: 403 });
+    }
+
+    const body = request.body as { filters?: Record<string, string>; filter_mode?: string; data?: Record<string, string> };
+    if (!body?.filters || !body?.data) {
+      throw new ValidationError('Body must have "filters" and "data" objects.');
+    }
+
+    const caseSensitive = query.casesensitive === 'true';
+    const rows = await sheetsService.getRows(userId, sheetApi.spreadsheetId, query.sheet, sheetApi.cacheTtlSeconds);
+
+    const filterFns = buildFilters(body.filters, caseSensitive);
+    const matching = body.filter_mode === 'or' ? filterOr(rows, filterFns) : filterAnd(rows, filterFns);
+
+    if (matching.length === 0) return { updated: 0 };
+
+    // Find a unique column to match each row (use first column as identifier)
+    const allRows = await sheetsService.getRows(userId, sheetApi.spreadsheetId, query.sheet, 0);
+    const headers = Object.keys(allRows[0] ?? {});
+    const idCol = headers[0];
+    if (!idCol) return { updated: 0 };
+
+    let updated = 0;
+    for (const row of matching) {
+      const idVal = row[idCol];
+      if (idVal) {
+        if (query.sync === 'true') {
+          updated += await sheetsService.updateRows(userId, sheetApi.spreadsheetId, idCol, idVal, body.data, query.sheet);
+        } else {
+          await enqueueWrite({ type: 'update', userId, spreadsheetId: sheetApi.spreadsheetId, sheetName: query.sheet, column: idCol, value: idVal, data: body.data });
+          updated++;
+        }
+      }
+    }
+
+    if (query.sync === 'true') return { updated };
+    return reply.status(202).send({ queued: true, matchedRows: updated });
+  });
+
+  // POST /:apiId/batch/delete — batch delete with filters
+  app.post('/:apiId/batch/delete', async (request, reply) => {
+    const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
+    const query = getQueryParams(request);
+    if (!sheetApi.allowDelete) {
+      return reply.status(403).send({ error: true, message: 'Deleting disabled.', code: 'DELETE_DISABLED', statusCode: 403 });
+    }
+
+    const body = request.body as { filters?: Record<string, string>; filter_mode?: string };
+    if (!body?.filters) {
+      throw new ValidationError('Body must have a "filters" object.');
+    }
+
+    const caseSensitive = query.casesensitive === 'true';
+    const rows = await sheetsService.getRows(userId, sheetApi.spreadsheetId, query.sheet, sheetApi.cacheTtlSeconds);
+
+    const filterFns = buildFilters(body.filters, caseSensitive);
+    const matching = body.filter_mode === 'or' ? filterOr(rows, filterFns) : filterAnd(rows, filterFns);
+
+    if (matching.length === 0) return { deleted: 0 };
+
+    const headers = Object.keys(rows[0] ?? {});
+    const idCol = headers[0];
+    if (!idCol) return { deleted: 0 };
+
+    let deleted = 0;
+    for (const row of matching) {
+      const idVal = row[idCol];
+      if (idVal) {
+        if (query.sync === 'true') {
+          deleted += await sheetsService.deleteRows(userId, sheetApi.spreadsheetId, idCol, idVal, query.sheet);
+        } else {
+          await enqueueWrite({ type: 'delete', userId, spreadsheetId: sheetApi.spreadsheetId, sheetName: query.sheet, column: idCol, value: idVal });
+          deleted++;
+        }
+      }
+    }
+
+    if (query.sync === 'true') return { deleted };
+    return reply.status(202).send({ queued: true, matchedRows: deleted });
   });
 
   // POST /:apiId — create rows
