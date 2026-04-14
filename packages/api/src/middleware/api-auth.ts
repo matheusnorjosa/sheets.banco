@@ -2,13 +2,17 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 
 interface SheetApiAuth {
   bearerToken: string | null;
+  bearerTokenPrevious: string | null;
+  bearerTokenRotatedAt: Date | null;
   basicUser: string | null;
   basicPass: string | null;
 }
 
+const GRACE_PERIOD_MS = 60 * 60 * 1000; // 1 hour
+
 /**
  * Middleware that checks per-API auth (bearer token or basic auth).
- * Only enforced if the SheetApi has auth configured. If no auth is set, the endpoint is public.
+ * Supports token rotation with a 1-hour grace period for the previous token.
  */
 export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
   const sheetApi = (request as any).sheetApi as SheetApiAuth | undefined;
@@ -25,7 +29,19 @@ export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
   // Try Bearer token
   if (hasBearerAuth && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
+
+    // Check current token
     if (token === sheetApi.bearerToken) return;
+
+    // Check previous token (grace period)
+    if (
+      sheetApi.bearerTokenPrevious &&
+      token === sheetApi.bearerTokenPrevious &&
+      sheetApi.bearerTokenRotatedAt
+    ) {
+      const elapsed = Date.now() - sheetApi.bearerTokenRotatedAt.getTime();
+      if (elapsed < GRACE_PERIOD_MS) return;
+    }
   }
 
   // Try Basic auth

@@ -89,6 +89,15 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
+    // If 2FA is enabled, return a temp token requiring verification
+    if (user.totpEnabled) {
+      const tempToken = app.jwt.sign(
+        { sub: user.id, email: user.email, pending2fa: true },
+        { expiresIn: '5m' },
+      );
+      return { requires2FA: true, tempToken };
+    }
+
     const token = app.jwt.sign({ sub: user.id, email: user.email });
 
     return {

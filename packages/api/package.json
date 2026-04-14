@@ -24,6 +24,8 @@
     "googleapis": "^171.4.0",
     "ioredis": "^5.10.1",
     "json2csv": "^6.0.0-alpha.2",
+    "otpauth": "^9.5.0",
+    "qrcode": "^1.5.4",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -31,6 +33,7 @@
     "@types/ioredis": "^4.28.10",
     "@types/json2csv": "^5.0.7",
     "@types/node": "^25.6.0",
+    "@types/qrcode": "^1.5.6",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2"
   }

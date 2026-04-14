@@ -153,11 +153,53 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     return { deleted: true };
   });
 
+  // POST /dashboard/apis/:id/rotate-token — rotate bearer token
+  app.post('/:id/rotate-token', async (request) => {
+    const userId = getUserId(request);
+    const { id } = request.params as { id: string };
+
+    const existing = await prisma.sheetApi.findFirst({ where: { id, userId } });
+    if (!existing) throw new NotFoundError('API not found.');
+
+    const newToken = crypto.randomUUID();
+    const api = await prisma.sheetApi.update({
+      where: { id },
+      data: {
+        bearerTokenPrevious: existing.bearerToken,
+        bearerToken: newToken,
+        bearerTokenRotatedAt: new Date(),
+      },
+    });
+
+    return {
+      bearerToken: newToken,
+      previousTokenValidUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour grace
+    };
+  });
+
+  // POST /dashboard/apis/:id/generate-hmac — generate HMAC secret
+  app.post('/:id/generate-hmac', async (request) => {
+    const userId = getUserId(request);
+    const { id } = request.params as { id: string };
+
+    const existing = await prisma.sheetApi.findFirst({ where: { id, userId } });
+    if (!existing) throw new NotFoundError('API not found.');
+
+    const hmacSecret = crypto.randomBytes(32).toString('hex');
+    await prisma.sheetApi.update({
+      where: { id },
+      data: { hmacSecret, requireSigning: true },
+    });
+
+    return { hmacSecret, requireSigning: true };
+  });
+
   // POST /dashboard/apis/:id/keys — create an API key
   app.post('/:id/keys', async (request, reply) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
-    const { label } = (request.body as { label?: string }) ?? {};
+    const body = (request.body ?? {}) as { label?: string; scopes?: string[] };
+    const label = body.label;
 
     const existing = await prisma.sheetApi.findFirst({ where: { id, userId } });
     if (!existing) throw new NotFoundError('API not found.');
@@ -167,6 +209,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         sheetApiId: id,
         key: crypto.randomUUID(),
         label: label ?? null,
+        scopes: body.scopes ?? ['sheets:read', 'sheets:write', 'sheets:delete'],
       },
     });
 

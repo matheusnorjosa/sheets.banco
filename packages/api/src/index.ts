@@ -17,6 +17,8 @@ import { initWebhookDeliveryQueue } from './queues/webhook-delivery.queue.js';
 import { initWebhookDeliveryWorker, closeWebhookDeliveryWorker } from './workers/webhook-delivery.worker.js';
 import { importExportRoutes } from './routes/v1/import-export.js';
 import { webhookRoutes } from './routes/dashboard/webhooks.js';
+import { auth2faRoutes } from './routes/auth-2fa.js';
+import { flushAuditLog } from './services/audit.service.js';
 
 const app = Fastify({
   logger: {
@@ -98,6 +100,7 @@ registerUsageLogger(app);
 
 // Routes
 app.register(authRoutes, { prefix: '/auth' });
+app.register(auth2faRoutes, { prefix: '/auth' });
 app.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
 app.register(webhookRoutes, { prefix: '/dashboard/apis' });
 app.register(sheetsRoutes, { prefix: '/api/v1' });
@@ -108,6 +111,7 @@ app.get('/health', async () => ({ status: 'ok' }));
 
 // Graceful shutdown
 app.addHook('onClose', async () => {
+  await flushAuditLog();
   await closeSheetsWriteWorker();
   await closeWebhookDeliveryWorker();
 });

@@ -9,6 +9,7 @@ import { apiAuth } from '../../middleware/api-auth.js';
 import { apiCors } from '../../middleware/cors.js';
 import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
 import { apiRateLimitOptions } from '../../middleware/rate-limiter.js';
+import { hmacVerify } from '../../middleware/hmac-verify.js';
 import { enqueueWrite } from '../../queues/sheets-write.queue.js';
 
 const createBodySchema = z.object({
@@ -70,10 +71,11 @@ export async function sheetsRoutes(app: FastifyInstance) {
     (request as any).sheetApi = sheetApi;
   });
 
-  // Per-API security: CORS, IP whitelist, auth
+  // Per-API security: CORS, IP whitelist, auth, HMAC
   app.addHook('onRequest', apiCors);
   app.addHook('onRequest', apiIpWhitelist);
   app.addHook('onRequest', apiAuth);
+  app.addHook('onRequest', hmacVerify);
 
   // GET /:apiId — return all rows (with pagination)
   app.get('/:apiId', async (request) => {

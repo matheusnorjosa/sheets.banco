@@ -18,6 +18,11 @@ model User {
   googleRefreshToken String?
   googleTokenExpiry  DateTime?
 
+  // 2FA (TOTP)
+  totpSecret    String?
+  totpEnabled   Boolean  @default(false)
+  recoveryCodes String[] // bcrypt hashes
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sheetApis    SheetApi[]
@@ -27,7 +32,7 @@ model SheetApi {
   id            String   @id @default(cuid())
   name          String
   spreadsheetId String
-  slug          String?  @unique // custom endpoint e.g. "products"
+  slug          String?  @unique
 
   // Owner
   userId String?
@@ -40,13 +45,19 @@ model SheetApi {
   allowDelete Boolean @default(true)
 
   // Auth (opt-in)
-  bearerToken String? @unique
-  basicUser   String?
-  basicPass   String?
+  bearerToken         String?   @unique
+  bearerTokenPrevious String?
+  bearerTokenRotatedAt DateTime?
+  basicUser           String?
+  basicPass           String?
+
+  // HMAC Request Signing
+  hmacSecret     String?
+  requireSigning Boolean @default(false)
 
   // Security
-  corsOrigins String?
-  ipWhitelist String?
+  corsOrigins  String?
+  ipWhitelist  String?
   rateLimitRpm Int    @default(60)
 
   // Cache
@@ -58,6 +69,7 @@ model SheetApi {
   apiKeys              ApiKey[]
   usageLogs            UsageLog[]
   webhookSubscriptions WebhookSubscription[]
+  auditLogs            AuditLog[]
 }
 
 model ApiKey {
@@ -66,7 +78,10 @@ model ApiKey {
   sheetApiId String
   sheetApi   SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
   label      String?
+  scopes     String[] @default(["sheets:read", "sheets:write", "sheets:delete"])
   active     Boolean  @default(true)
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
   createdAt  DateTime @default(now())
 }
 
@@ -84,13 +99,30 @@ model UsageLog {
   @@index([sheetApiId, createdAt])
 }
 
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String
+  action       String   // "api.created", "api.deleted", "settings.updated", etc.
+  resourceType String   // "SheetApi", "ApiKey", "User"
+  resourceId   String
+  sheetApiId   String?
+  sheetApi     SheetApi? @relation(fields: [sheetApiId], references: [id], onDelete: SetNull)
+  changes      Json?
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([resourceType, resourceId])
+}
+
 model WebhookSubscription {
   id         String   @id @default(cuid())
   sheetApiId String
   sheetApi   SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
   url        String
   secret     String
-  events     String[] // "row.created", "row.updated", "row.deleted", "rows.cleared"
+  events     String[]
   active     Boolean  @default(true)
   createdAt  DateTime @default(now())
 
@@ -103,7 +135,7 @@ model WebhookDelivery {
   subscription   WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   event          String
   payload        Json
-  status         String   @default("pending") // pending, success, failed
+  status         String   @default("pending")
   attempts       Int      @default(0)
   responseCode   Int?
   createdAt      DateTime @default(now())
