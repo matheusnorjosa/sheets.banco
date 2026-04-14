@@ -2,6 +2,8 @@ import Fastify from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
 import { env } from './config/env.js';
 import { AppError } from './lib/errors.js';
 import { sheetsRoutes } from './routes/v1/sheets.js';
@@ -45,6 +47,26 @@ app.register(cors, {
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 });
+
+// OpenAPI / Swagger
+app.register(swagger, {
+  openapi: {
+    info: {
+      title: 'sheets.banco API',
+      description: 'Turn Google Sheets into REST APIs',
+      version: '1.0.0',
+    },
+    servers: [{ url: `http://${env.HOST}:${env.PORT}` }],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        basicAuth: { type: 'http', scheme: 'basic' },
+        apiKey: { type: 'apiKey', in: 'header', name: 'X-Api-Key' },
+      },
+    },
+  },
+});
+app.register(swaggerUi, { routePrefix: '/docs' });
 
 // Rate limiter (registered globally, applied per-route)
 registerRateLimiter(app);
@@ -107,6 +129,7 @@ app.register(webhookRoutes, { prefix: '/dashboard/apis' });
 app.register(logsStreamRoutes, { prefix: '/dashboard/apis' });
 app.register(sheetsRoutes, { prefix: '/api/v1' });
 app.register(importExportRoutes, { prefix: '/api/v1' });
+app.register((await import('./routes/v1/schema.js')).schemaRoutes, { prefix: '/api/v1' });
 
 // Health check
 app.get('/health', async () => ({ status: 'ok' }));

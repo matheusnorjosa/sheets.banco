@@ -1,0 +1,30 @@
+{
+  "name": "sheets-banco-cli",
+  "version": "0.1.0",
+  "description": "CLI for sheets.banco — turn Google Sheets into REST APIs",
+  "type": "module",
+  "bin": {
+    "sheets-banco": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/cli.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "google-sheets",
+    "api",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  }
+}
