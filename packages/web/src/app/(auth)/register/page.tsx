@@ -32,9 +32,7 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center mb-6">
-          <div className="w-12 h-12 bg-[var(--accent)] rounded-xl flex items-center justify-center text-white font-bold text-xl">
-            S
-          </div>
+          <img src="/logo.png" alt="sheets.banco" className="h-14 w-auto" />
         </div>
         <h1 className="text-2xl font-bold text-center text-[var(--text-primary)] mb-1">sheets.banco</h1>
         <p className="text-[var(--text-muted)] text-center mb-8 text-sm">Create your account</p>
