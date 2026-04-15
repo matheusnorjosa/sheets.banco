@@ -28,7 +28,7 @@ export default function ApiDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div className="text-gray-400">Loading...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
   if (!sheetApi) return <div className="text-red-400">API not found.</div>;
 
   const endpoint = `${API_URL}/api/v1/${sheetApi.id}`;
@@ -59,8 +59,8 @@ export default function ApiDetailPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">{sheetApi.name}</h1>
-          <p className="text-sm text-gray-500 font-mono">{sheetApi.id}</p>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">{sheetApi.name}</h1>
+          <p className="text-sm text-[var(--text-muted)] font-mono">{sheetApi.id}</p>
         </div>
         <button
           onClick={handleDelete}
@@ -72,15 +72,15 @@ export default function ApiDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-[#2a2a4a]">
+      <div className="flex gap-1 mb-6 border-b border-[var(--card-border)]">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.key
-                ? "border-[#4f46e5] text-[#818cf8]"
-                : "border-transparent text-gray-500 hover:text-gray-300"
+                ? "border-[var(--accent)] text-[var(--accent-light)]"
+                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
             }`}
           >
             {t.label}
@@ -123,38 +123,38 @@ function OverviewTab({ endpoint, sheetApi }: { endpoint: string; sheetApi: any }
 
   return (
     <div className="space-y-6">
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-        <h2 className="font-semibold text-white mb-3">API Endpoint</h2>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">API Endpoint</h2>
         <div className="flex items-center gap-2">
-          <code className="flex-1 bg-[#1e1e3a] px-3 py-2 rounded-lg text-sm font-mono text-gray-300 border border-[#3a3a5a]">
+          <code className="flex-1 bg-[var(--input-bg)] px-3 py-2 rounded-lg text-sm font-mono text-[var(--text-secondary)] border border-[var(--input-border)]">
             {endpoint}
           </code>
           <button
             onClick={() => copy(endpoint)}
-            className="bg-[#2a2a4a] px-4 py-2 rounded-lg text-sm text-gray-300 hover:bg-[#3a3a5a] transition-colors"
+            className="bg-[var(--card-border)] px-4 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--input-border)] transition-colors"
           >
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
       </div>
 
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-        <h2 className="font-semibold text-white mb-3">Quick Start</h2>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Quick Start</h2>
         <div className="flex gap-1 mb-3 flex-wrap">
           {Object.entries(snippets).map(([key, { label }]) => (
             <button key={key} onClick={() => setSnippetLang(key)}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${snippetLang === key ? "bg-[#4f46e5] text-white" : "bg-[#2a2a4a] text-gray-400 hover:text-white"}`}>
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${snippetLang === key ? "bg-[var(--accent)] text-white" : "bg-[var(--card-border)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}>
               {label}
             </button>
           ))}
         </div>
-        <pre className="bg-[#0f0f23] text-green-400 p-3 rounded-lg text-xs overflow-x-auto border border-[#2a2a4a] whitespace-pre">
+        <pre className="bg-[var(--sidebar-bg)] text-green-400 p-3 rounded-lg text-xs overflow-x-auto border border-[var(--card-border)] whitespace-pre">
           {snippets[snippetLang].code}
         </pre>
       </div>
 
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-        <h2 className="font-semibold text-white mb-3">Available Endpoints</h2>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Available Endpoints</h2>
         <div className="text-sm space-y-2">
           {[
             { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}`, desc: "All rows" },
@@ -169,8 +169,8 @@ function OverviewTab({ endpoint, sheetApi }: { endpoint: string; sheetApi: any }
               <span className={`${ep.color} px-2 py-0.5 rounded text-xs font-mono font-bold w-16 text-center`}>
                 {ep.method}
               </span>
-              <code className="text-gray-400 text-xs">{ep.path}</code>
-              <span className="text-gray-600 text-xs">— {ep.desc}</span>
+              <code className="text-[var(--text-tertiary)] text-xs">{ep.path}</code>
+              <span className="text-[var(--text-faint)] text-xs">— {ep.desc}</span>
             </div>
           ))}
         </div>
@@ -210,7 +210,7 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
   };
 
   return (
-    <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-6 max-w-lg space-y-5">
+    <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-6 max-w-lg space-y-5">
       {msg && (
         <div className={`text-sm rounded-lg p-3 ${msg.includes("saved") ? "bg-green-900/30 border border-green-700 text-green-400" : "bg-red-900/30 border border-red-700 text-red-400"}`}>
           {msg}
@@ -218,12 +218,12 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1.5">Name</label>
-        <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]" />
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Name</label>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">Permissions</label>
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Permissions</label>
         <div className="space-y-2">
           {[
             { label: "Read", value: allowRead, set: setAllowRead },
@@ -231,8 +231,8 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
             { label: "Update", value: allowUpdate, set: setAllowUpdate },
             { label: "Delete", value: allowDelete, set: setAllowDelete },
           ].map((perm) => (
-            <label key={perm.label} className="flex items-center gap-2 text-sm text-gray-300">
-              <input type="checkbox" checked={perm.value} onChange={(e) => perm.set(e.target.checked)} className="rounded bg-[#1e1e3a] border-[#3a3a5a]" />
+            <label key={perm.label} className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+              <input type="checkbox" checked={perm.value} onChange={(e) => perm.set(e.target.checked)} className="rounded bg-[var(--input-bg)] border-[var(--input-border)]" />
               {perm.label}
             </label>
           ))}
@@ -240,22 +240,22 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1.5">Cache TTL (seconds)</label>
-        <input type="number" value={cacheTtl} onChange={(e) => setCacheTtl(Number(e.target.value))} min={0} className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]" />
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Cache TTL (seconds)</label>
+        <input type="number" value={cacheTtl} onChange={(e) => setCacheTtl(Number(e.target.value))} min={0} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1.5">Rate Limit (requests/min)</label>
-        <input type="number" value={rateLimitRpm} onChange={(e) => setRateLimitRpm(Number(e.target.value))} min={1} className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]" />
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Rate Limit (requests/min)</label>
+        <input type="number" value={rateLimitRpm} onChange={(e) => setRateLimitRpm(Number(e.target.value))} min={1} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1.5">Bearer Token (optional)</label>
-        <input type="text" value={bearerToken} onChange={(e) => setBearerToken(e.target.value)} className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 font-mono focus:outline-none focus:border-[#4f46e5]" placeholder="Leave empty for public access" />
-        <p className="text-xs text-gray-500 mt-1.5">If set, requests must include Authorization: Bearer &lt;token&gt;</p>
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Bearer Token (optional)</label>
+        <input type="text" value={bearerToken} onChange={(e) => setBearerToken(e.target.value)} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]" placeholder="Leave empty for public access" />
+        <p className="text-xs text-[var(--text-muted)] mt-1.5">If set, requests must include Authorization: Bearer &lt;token&gt;</p>
       </div>
 
-      <button onClick={handleSave} disabled={saving} className="bg-[#4f46e5] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+      <button onClick={handleSave} disabled={saving} className="bg-[var(--accent)] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
         {saving ? "Saving..." : "Save Settings"}
       </button>
     </div>
@@ -284,24 +284,24 @@ function KeysTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => void }
 
   return (
     <div className="space-y-4 max-w-lg">
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-        <h2 className="font-semibold text-white mb-3">Create API Key</h2>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Create API Key</h2>
         <div className="flex gap-2">
-          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} className="flex-1 bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]" placeholder="Label (optional)" />
-          <button onClick={handleCreate} disabled={creating} className="bg-[#4f46e5] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" placeholder="Label (optional)" />
+          <button onClick={handleCreate} disabled={creating} className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
             Create
           </button>
         </div>
       </div>
 
       {sheetApi.apiKeys && sheetApi.apiKeys.length > 0 ? (
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg divide-y divide-[#2a2a4a]">
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg divide-y divide-[var(--card-border)]">
           {sheetApi.apiKeys.map((k: any) => (
             <div key={k.id} className="p-4 flex items-center justify-between">
               <div>
-                <code className="text-sm font-mono bg-[#1e1e3a] px-2 py-1 rounded text-gray-300">{k.key}</code>
-                {k.label && <span className="ml-2 text-xs text-gray-500">{k.label}</span>}
-                <div className="text-xs text-gray-600 mt-1">Created {new Date(k.createdAt).toLocaleDateString()}</div>
+                <code className="text-sm font-mono bg-[var(--input-bg)] px-2 py-1 rounded text-[var(--text-secondary)]">{k.key}</code>
+                {k.label && <span className="ml-2 text-xs text-[var(--text-muted)]">{k.label}</span>}
+                <div className="text-xs text-[var(--text-faint)] mt-1">Created {new Date(k.createdAt).toLocaleDateString()}</div>
               </div>
               <button onClick={() => handleDelete(k.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">
                 Revoke
@@ -310,7 +310,7 @@ function KeysTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => void }
           ))}
         </div>
       ) : (
-        <p className="text-sm text-gray-500">No API keys yet.</p>
+        <p className="text-sm text-[var(--text-muted)]">No API keys yet.</p>
       )}
     </div>
   );
@@ -331,8 +331,8 @@ function UsageTab({ apiId }: { apiId: string }) {
       .finally(() => setLoading(false));
   }, [apiId, days]);
 
-  if (loading) return <div className="text-gray-400">Loading usage...</div>;
-  if (!usage) return <div className="text-gray-500">No data.</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Loading usage...</div>;
+  if (!usage) return <div className="text-[var(--text-muted)]">No data.</div>;
 
   return (
     <div className="space-y-4">
@@ -340,7 +340,7 @@ function UsageTab({ apiId }: { apiId: string }) {
       <div className="flex gap-2">
         {[1, 7, 30].map((d) => (
           <button key={d} onClick={() => setDays(d)}
-            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${days === d ? "bg-[#4f46e5] text-white" : "bg-[#2a2a4a] text-gray-400 hover:text-white"}`}>
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${days === d ? "bg-[var(--accent)] text-white" : "bg-[var(--card-border)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}>
             {d === 1 ? "24h" : `${d}d`}
           </button>
         ))}
@@ -348,17 +348,17 @@ function UsageTab({ apiId }: { apiId: string }) {
 
       {/* Stats cards */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-          <p className="text-sm text-gray-500 mb-1">Total Requests</p>
-          <p className="text-3xl font-bold text-white">{usage.total}</p>
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+          <p className="text-sm text-[var(--text-muted)] mb-1">Total Requests</p>
+          <p className="text-3xl font-bold text-[var(--text-primary)]">{usage.total}</p>
         </div>
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-          <p className="text-sm text-gray-500 mb-1">Period Requests</p>
-          <p className="text-3xl font-bold text-white">{chart?.total ?? 0}</p>
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+          <p className="text-sm text-[var(--text-muted)] mb-1">Period Requests</p>
+          <p className="text-3xl font-bold text-[var(--text-primary)]">{chart?.total ?? 0}</p>
         </div>
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-          <p className="text-sm text-gray-500 mb-1">Avg Response</p>
-          <p className="text-3xl font-bold text-white">
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+          <p className="text-sm text-[var(--text-muted)] mb-1">Avg Response</p>
+          <p className="text-3xl font-bold text-[var(--text-primary)]">
             {chart?.timeline?.length ? Math.round(chart.timeline.reduce((s: number, t: any) => s + t.avgMs, 0) / chart.timeline.length) : 0}ms
           </p>
         </div>
@@ -366,13 +366,13 @@ function UsageTab({ apiId }: { apiId: string }) {
 
       {/* Timeline chart */}
       {chart?.timeline?.length > 0 && (
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-          <h2 className="font-semibold text-white mb-4">Requests over time</h2>
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+          <h2 className="font-semibold text-[var(--text-primary)] mb-4">Requests over time</h2>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={chart.timeline}>
               <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} />
               <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} width={40} />
-              <Tooltip contentStyle={{ background: "#0f0f23", border: "1px solid #2a2a4a", borderRadius: 8, color: "#fff", fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: "var(--sidebar-bg)", border: "1px solid var(--card-border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 12 }} />
               <Area type="monotone" dataKey="requests" stroke="#4f46e5" fill="#4f46e5" fillOpacity={0.2} />
             </AreaChart>
           </ResponsiveContainer>
@@ -383,21 +383,21 @@ function UsageTab({ apiId }: { apiId: string }) {
       {(chart?.methods?.length > 0 || chart?.statuses?.length > 0) && (
         <div className="grid gap-4 sm:grid-cols-2">
           {chart?.methods?.length > 0 && (
-            <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-              <h2 className="font-semibold text-white mb-4">By Method</h2>
+            <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+              <h2 className="font-semibold text-[var(--text-primary)] mb-4">By Method</h2>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={chart.methods}>
                   <XAxis dataKey="method" tick={{ fill: "#6b7280", fontSize: 11 }} />
                   <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} width={40} />
-                  <Tooltip contentStyle={{ background: "#0f0f23", border: "1px solid #2a2a4a", borderRadius: 8, color: "#fff", fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: "var(--sidebar-bg)", border: "1px solid var(--card-border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 12 }} />
                   <Bar dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           )}
           {chart?.statuses?.length > 0 && (
-            <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-              <h2 className="font-semibold text-white mb-4">By Status</h2>
+            <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+              <h2 className="font-semibold text-[var(--text-primary)] mb-4">By Status</h2>
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
                   <Pie data={chart.statuses} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={65} label={(e: any) => `${e.status}: ${e.count}`}>
@@ -405,7 +405,7 @@ function UsageTab({ apiId }: { apiId: string }) {
                       <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ background: "#0f0f23", border: "1px solid #2a2a4a", borderRadius: 8, color: "#fff", fontSize: 12 }} />
+                  <Tooltip contentStyle={{ background: "var(--sidebar-bg)", border: "1px solid var(--card-border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -415,10 +415,10 @@ function UsageTab({ apiId }: { apiId: string }) {
 
       {/* Recent requests table */}
       {usage.recent.length > 0 && (
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg overflow-hidden">
-          <h2 className="font-semibold text-white px-4 py-3 border-b border-[#2a2a4a]">Recent Requests</h2>
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg overflow-hidden">
+          <h2 className="font-semibold text-[var(--text-primary)] px-4 py-3 border-b border-[var(--card-border)]">Recent Requests</h2>
           <table className="w-full text-sm">
-            <thead className="bg-[#0f0f23] text-gray-500 text-xs">
+            <thead className="bg-[var(--sidebar-bg)] text-[var(--text-muted)] text-xs">
               <tr>
                 <th className="text-left px-4 py-2.5">Method</th>
                 <th className="text-left px-4 py-2.5">Path</th>
@@ -427,18 +427,18 @@ function UsageTab({ apiId }: { apiId: string }) {
                 <th className="text-left px-4 py-2.5">Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2a2a4a]">
+            <tbody className="divide-y divide-[var(--card-border)]">
               {usage.recent.map((log: any, i: number) => (
-                <tr key={i} className="hover:bg-[#1e1e3a]">
-                  <td className="px-4 py-2.5 font-mono text-xs text-gray-300">{log.method}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-gray-400 truncate max-w-[200px]">{log.path}</td>
+                <tr key={i} className="hover:bg-[var(--input-bg)]">
+                  <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-secondary)]">{log.method}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-tertiary)] truncate max-w-[200px]">{log.path}</td>
                   <td className="px-4 py-2.5">
                     <span className={`text-xs font-medium ${log.statusCode < 400 ? "text-green-400" : "text-red-400"}`}>
                       {log.statusCode}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-gray-500">{log.responseMs}ms</td>
-                  <td className="px-4 py-2.5 text-xs text-gray-600">{new Date(log.createdAt).toLocaleString()}</td>
+                  <td className="px-4 py-2.5 text-xs text-[var(--text-muted)]">{log.responseMs}ms</td>
+                  <td className="px-4 py-2.5 text-xs text-[var(--text-faint)]">{new Date(log.createdAt).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -500,54 +500,54 @@ function PlaygroundTab({ endpoint }: { endpoint: string }) {
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-        <h2 className="font-semibold text-white mb-4">API Playground</h2>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+        <h2 className="font-semibold text-[var(--text-primary)] mb-4">API Playground</h2>
 
         {/* Method + Path */}
         <div className="flex gap-2 mb-3">
           <select value={method} onChange={(e) => setMethod(e.target.value)}
-            className="bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200">
+            className="bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)]">
             {["GET", "POST", "PATCH", "DELETE"].map((m) => <option key={m}>{m}</option>)}
           </select>
-          <div className="flex-1 flex items-center bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3">
-            <span className="text-xs text-gray-500 mr-1 truncate">{endpoint}</span>
+          <div className="flex-1 flex items-center bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3">
+            <span className="text-xs text-[var(--text-muted)] mr-1 truncate">{endpoint}</span>
             <input type="text" value={path} onChange={(e) => setPath(e.target.value)}
-              className="flex-1 bg-transparent py-2 text-sm text-gray-200 focus:outline-none" placeholder="/search?name=Alice" />
+              className="flex-1 bg-transparent py-2 text-sm text-[var(--text-secondary)] focus:outline-none" placeholder="/search?name=Alice" />
           </div>
           <button onClick={handleSend} disabled={loading}
-            className="bg-[#4f46e5] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+            className="bg-[var(--accent)] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
             {loading ? "..." : "Send"}
           </button>
         </div>
 
         {/* Headers */}
         <div className="mb-3">
-          <label className="block text-xs text-gray-500 mb-1">Headers (one per line, Key: Value)</label>
+          <label className="block text-xs text-[var(--text-muted)] mb-1">Headers (one per line, Key: Value)</label>
           <textarea value={headers} onChange={(e) => setHeaders(e.target.value)} rows={2}
-            className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-xs text-gray-300 font-mono focus:outline-none focus:border-[#4f46e5]"
+            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]"
             placeholder="Authorization: Bearer token123" />
         </div>
 
         {/* Body */}
         {method !== "GET" && (
           <div className="mb-3">
-            <label className="block text-xs text-gray-500 mb-1">Body (JSON)</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Body (JSON)</label>
             <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5}
-              className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-xs text-gray-300 font-mono focus:outline-none focus:border-[#4f46e5]" />
+              className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]" />
           </div>
         )}
       </div>
 
       {/* Response */}
       {response && (
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
           <div className="flex items-center gap-3 mb-3">
             <span className={`text-sm font-bold ${response.status >= 200 && response.status < 400 ? "text-green-400" : "text-red-400"}`}>
               {response.status || "Error"}
             </span>
-            <span className="text-xs text-gray-500">{response.time}ms</span>
+            <span className="text-xs text-[var(--text-muted)]">{response.time}ms</span>
           </div>
-          <pre className="bg-[#0f0f23] border border-[#2a2a4a] rounded-lg p-3 text-xs text-gray-300 font-mono overflow-x-auto max-h-[400px] overflow-y-auto">
+          <pre className="bg-[var(--sidebar-bg)] border border-[var(--card-border)] rounded-lg p-3 text-xs text-[var(--text-secondary)] font-mono overflow-x-auto max-h-[400px] overflow-y-auto">
             {response.body}
           </pre>
         </div>
@@ -592,13 +592,13 @@ function ComputedFieldsTab({ apiId }: { apiId: string }) {
     load();
   };
 
-  if (loading) return <div className="text-gray-400">Loading...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
 
   return (
     <div className="space-y-4 max-w-2xl">
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-        <h2 className="font-semibold text-white mb-3">Add Computed Field</h2>
-        <p className="text-xs text-gray-500 mb-3">
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Add Computed Field</h2>
+        <p className="text-xs text-[var(--text-muted)] mb-3">
           Use {"{{columnName}}"} to reference columns. Supports templates and math: {"{{price}} * {{qty}}"}, {"{{first}} {{last}}"}
         </p>
         {msg && (
@@ -606,32 +606,32 @@ function ComputedFieldsTab({ apiId }: { apiId: string }) {
         )}
         <div className="flex gap-2 mb-2">
           <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-            className="w-40 bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]"
+            className="w-40 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]"
             placeholder="Field name" />
           <input type="text" value={expression} onChange={(e) => setExpression(e.target.value)}
-            className="flex-1 bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 font-mono focus:outline-none focus:border-[#4f46e5]"
+            className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]"
             placeholder="{{price}} * {{quantity}}" />
           <button onClick={handleCreate} disabled={creating}
-            className="bg-[#4f46e5] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+            className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
             Add
           </button>
         </div>
       </div>
 
       {fields.length > 0 ? (
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg divide-y divide-[#2a2a4a]">
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg divide-y divide-[var(--card-border)]">
           {fields.map((f: any) => (
             <div key={f.id} className="p-4 flex items-center justify-between">
               <div>
-                <span className="text-sm font-medium text-white">{f.name}</span>
-                <code className="ml-3 text-xs text-gray-400 bg-[#1e1e3a] px-2 py-1 rounded">{f.expression}</code>
+                <span className="text-sm font-medium text-[var(--text-primary)]">{f.name}</span>
+                <code className="ml-3 text-xs text-[var(--text-tertiary)] bg-[var(--input-bg)] px-2 py-1 rounded">{f.expression}</code>
               </div>
               <button onClick={() => handleDelete(f.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Remove</button>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-gray-500">No computed fields yet. They appear as virtual columns in API responses.</p>
+        <p className="text-sm text-[var(--text-muted)]">No computed fields yet. They appear as virtual columns in API responses.</p>
       )}
     </div>
   );
@@ -670,51 +670,51 @@ function SnapshotsTab({ apiId }: { apiId: string }) {
     load();
   };
 
-  if (loading) return <div className="text-gray-400">Loading...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="font-semibold text-white">Snapshots</h2>
+          <h2 className="font-semibold text-[var(--text-primary)]">Snapshots</h2>
           <button onClick={handleCreate} disabled={creating}
-            className="bg-[#4f46e5] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+            className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
             {creating ? "Creating..." : "Create Snapshot"}
           </button>
         </div>
-        <p className="text-xs text-gray-500">
-          Snapshots save the current state of your data. Access via API: <code className="text-gray-400">?version=N</code>
+        <p className="text-xs text-[var(--text-muted)]">
+          Snapshots save the current state of your data. Access via API: <code className="text-[var(--text-tertiary)]">?version=N</code>
         </p>
       </div>
 
       {snapshots.length > 0 ? (
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg divide-y divide-[#2a2a4a]">
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg divide-y divide-[var(--card-border)]">
           {snapshots.map((s: any) => (
             <div key={s.id} className="p-4 flex items-center justify-between">
               <div>
-                <span className="text-sm font-bold text-white">v{s.version}</span>
-                <span className="ml-3 text-xs text-gray-400">{s.rowCount} rows, {s.headers.length} columns</span>
-                {s.sheetName && <span className="ml-2 text-xs text-gray-500">({s.sheetName})</span>}
-                <div className="text-xs text-gray-600 mt-0.5">{new Date(s.createdAt).toLocaleString()}</div>
+                <span className="text-sm font-bold text-[var(--text-primary)]">v{s.version}</span>
+                <span className="ml-3 text-xs text-[var(--text-tertiary)]">{s.rowCount} rows, {s.headers.length} columns</span>
+                {s.sheetName && <span className="ml-2 text-xs text-[var(--text-muted)]">({s.sheetName})</span>}
+                <div className="text-xs text-[var(--text-faint)] mt-0.5">{new Date(s.createdAt).toLocaleString()}</div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => handleView(s.version)} className="text-[#818cf8] text-xs hover:text-[#a5b4fc] transition-colors">View</button>
+                <button onClick={() => handleView(s.version)} className="text-[var(--accent-light)] text-xs hover:text-[var(--accent-lighter)] transition-colors">View</button>
                 <button onClick={() => handleDelete(s.version)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Delete</button>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-gray-500">No snapshots yet.</p>
+        <p className="text-sm text-[var(--text-muted)]">No snapshots yet.</p>
       )}
 
       {viewData && (
-        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-white">Snapshot v{viewData.version} Data</h3>
-            <button onClick={() => setViewData(null)} className="text-gray-400 text-xs hover:text-white">Close</button>
+            <h3 className="font-semibold text-[var(--text-primary)]">Snapshot v{viewData.version} Data</h3>
+            <button onClick={() => setViewData(null)} className="text-[var(--text-tertiary)] text-xs hover:text-[var(--text-primary)]">Close</button>
           </div>
-          <pre className="bg-[#0f0f23] border border-[#2a2a4a] rounded-lg p-3 text-xs text-gray-300 font-mono overflow-auto max-h-[400px]">
+          <pre className="bg-[var(--sidebar-bg)] border border-[var(--card-border)] rounded-lg p-3 text-xs text-[var(--text-secondary)] font-mono overflow-auto max-h-[400px]">
             {JSON.stringify(viewData.data, null, 2)}
           </pre>
         </div>
@@ -762,13 +762,13 @@ function SyncTab({ apiId }: { apiId: string }) {
     }
   };
 
-  if (loading) return <div className="text-gray-400">Loading...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
 
   return (
     <div className="space-y-4 max-w-lg">
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5 space-y-4">
-        <h2 className="font-semibold text-white">Scheduled Sync</h2>
-        <p className="text-xs text-gray-500">
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5 space-y-4">
+        <h2 className="font-semibold text-[var(--text-primary)]">Scheduled Sync</h2>
+        <p className="text-xs text-[var(--text-muted)]">
           Automatically invalidate cache on a schedule so API responses stay fresh.
         </p>
 
@@ -776,26 +776,26 @@ function SyncTab({ apiId }: { apiId: string }) {
           <div className={`text-sm rounded-lg p-2 ${msg.includes("saved") || msg.includes("Cache") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
         )}
 
-        <label className="flex items-center gap-2 text-sm text-gray-300">
-          <input type="checkbox" checked={syncEnabled} onChange={(e) => setSyncEnabled(e.target.checked)} className="rounded bg-[#1e1e3a] border-[#3a3a5a]" />
+        <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <input type="checkbox" checked={syncEnabled} onChange={(e) => setSyncEnabled(e.target.checked)} className="rounded bg-[var(--input-bg)] border-[var(--input-border)]" />
           Enable scheduled sync
         </label>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1.5">Cron Expression</label>
+          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Cron Expression</label>
           <input type="text" value={syncCron} onChange={(e) => setSyncCron(e.target.value)}
-            className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 font-mono focus:outline-none focus:border-[#4f46e5]"
+            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]"
             placeholder="*/15 * * * *" />
-          <p className="text-xs text-gray-600 mt-1">Examples: <code>*/15 * * * *</code> (every 15 min), <code>0 * * * *</code> (hourly), <code>0 0 * * *</code> (daily)</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">Examples: <code>*/15 * * * *</code> (every 15 min), <code>0 * * * *</code> (hourly), <code>0 0 * * *</code> (daily)</p>
         </div>
 
         <div className="flex gap-2">
           <button onClick={handleSave} disabled={saving}
-            className="bg-[#4f46e5] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+            className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
             {saving ? "Saving..." : "Save"}
           </button>
           <button onClick={handleTrigger}
-            className="bg-[#2a2a4a] text-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#3a3a5a] transition-colors">
+            className="bg-[var(--card-border)] text-[var(--text-secondary)] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--input-border)] transition-colors">
             Sync Now
           </button>
         </div>
@@ -844,14 +844,14 @@ function SpreadsheetsTab({ apiId }: { apiId: string }) {
     load();
   };
 
-  if (loading) return <div className="text-gray-400">Loading...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
 
   return (
     <div className="space-y-4 max-w-2xl">
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
-        <h2 className="font-semibold text-white mb-3">Multi-Spreadsheet</h2>
-        <p className="text-xs text-gray-500 mb-3">
-          Link additional Google Sheets to this API. Access them via <code className="text-gray-400">?source=&lt;id&gt;</code> query param.
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Multi-Spreadsheet</h2>
+        <p className="text-xs text-[var(--text-muted)] mb-3">
+          Link additional Google Sheets to this API. Access them via <code className="text-[var(--text-tertiary)]">?source=&lt;id&gt;</code> query param.
         </p>
 
         {msg && (
@@ -860,28 +860,28 @@ function SpreadsheetsTab({ apiId }: { apiId: string }) {
 
         <div className="space-y-2 mb-3">
           <input type="text" value={label} onChange={(e) => setLabel(e.target.value)}
-            className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]"
+            className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]"
             placeholder="Label (e.g., Orders 2024)" />
           <div className="flex gap-2">
             <input type="text" value={url} onChange={(e) => setUrl(e.target.value)}
-              className="flex-1 bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]"
+              className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]"
               placeholder="Google Sheets URL or ID" />
             <button onClick={handleAdd} disabled={adding}
-              className="bg-[#4f46e5] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+              className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
               Link
             </button>
           </div>
         </div>
       </div>
 
-      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg divide-y divide-[#2a2a4a]">
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg divide-y divide-[var(--card-border)]">
         {/* Primary sheet */}
         {primary && (
           <div className="p-4 flex items-center justify-between">
             <div>
-              <span className="text-sm font-medium text-white">{primary.label}</span>
-              <span className="ml-2 text-xs bg-[#4f46e5]/20 text-[#818cf8] px-2 py-0.5 rounded">Primary</span>
-              <div className="text-xs text-gray-500 font-mono mt-0.5">{primary.spreadsheetId}</div>
+              <span className="text-sm font-medium text-[var(--text-primary)]">{primary.label}</span>
+              <span className="ml-2 text-xs bg-[var(--accent-bg)] text-[var(--accent-light)] px-2 py-0.5 rounded">Primary</span>
+              <div className="text-xs text-[var(--text-muted)] font-mono mt-0.5">{primary.spreadsheetId}</div>
             </div>
           </div>
         )}
@@ -890,9 +890,9 @@ function SpreadsheetsTab({ apiId }: { apiId: string }) {
         {additional.map((s: any) => (
           <div key={s.id} className="p-4 flex items-center justify-between">
             <div>
-              <span className="text-sm font-medium text-white">{s.label}</span>
-              <div className="text-xs text-gray-500 font-mono mt-0.5">
-                ID: <code className="text-gray-400">{s.id}</code>
+              <span className="text-sm font-medium text-[var(--text-primary)]">{s.label}</span>
+              <div className="text-xs text-[var(--text-muted)] font-mono mt-0.5">
+                ID: <code className="text-[var(--text-tertiary)]">{s.id}</code>
               </div>
             </div>
             <button onClick={() => handleRemove(s.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Unlink</button>

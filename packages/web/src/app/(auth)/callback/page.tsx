@@ -25,10 +25,10 @@ function CallbackHandler() {
 
 export default function CallbackPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#1a1a2e]">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--background)]">
       <div className="text-center">
-        <div className="w-10 h-10 border-4 border-[#4f46e5] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-gray-400 text-sm">Signing you in...</p>
+        <div className="w-10 h-10 border-4 border-[var(--accent)] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-[var(--text-tertiary)] text-sm">Signing you in...</p>
       </div>
       <Suspense>
         <CallbackHandler />
