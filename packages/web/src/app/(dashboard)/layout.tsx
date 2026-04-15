@@ -9,7 +9,7 @@ import { useTheme } from "@/lib/theme-context";
 const navItems = [
   {
     href: "/apis",
-    label: "Your APIs",
+    label: "Suas APIs",
     onboard: "nav-apis",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -19,7 +19,7 @@ const navItems = [
   },
   {
     href: "/statistics",
-    label: "Statistics",
+    label: "Estatísticas",
     onboard: "nav-stats",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -48,7 +48,7 @@ export default function DashboardLayout({
   if (loading || !user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[var(--background)]">
-        <div className="text-[var(--text-tertiary)]">Loading...</div>
+        <div className="text-[var(--text-tertiary)]">Carregando...</div>
       </div>
     );
   }
@@ -59,8 +59,8 @@ export default function DashboardLayout({
       <aside className="w-16 bg-[var(--sidebar-bg)] flex flex-col items-center py-4 border-r border-[var(--card-border)]">
         {/* Logo */}
         <Link href="/apis" className="mb-8 group" title="sheets.banco">
-          <div className="w-10 h-10 bg-[var(--accent)] rounded-lg flex items-center justify-center text-white font-bold text-lg group-hover:bg-[var(--accent-hover)] transition-colors">
-            S
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center group-hover:opacity-80 transition-opacity">
+            <img src="/logo.png" alt="sheets.banco" className="w-8 h-8" />
           </div>
         </Link>
 
@@ -89,7 +89,7 @@ export default function DashboardLayout({
           <button
             onClick={toggleTheme}
             data-onboard="theme-toggle"
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Mudar para modo claro" : "Mudar para modo escuro"}
             className="w-10 h-10 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--card-bg)] hover:text-[var(--text-secondary)] transition-colors"
           >
             {theme === "dark" ? (
@@ -107,7 +107,7 @@ export default function DashboardLayout({
               logout();
               router.push("/login");
             }}
-            title="Sign out"
+            title="Sair"
             className="w-10 h-10 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:bg-[var(--card-bg)] hover:text-[var(--text-secondary)] transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

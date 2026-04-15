@@ -28,7 +28,7 @@ export default function NewApiPage() {
       const data = await api.createApi(name, url);
       router.push(`/apis/${data.api.id}`);
     } catch (err: any) {
-      setError(err.message || "Failed to connect sheet");
+      setError(err.message || "Falha ao conectar planilha");
     } finally {
       setLoading(false);
     }
@@ -36,21 +36,21 @@ export default function NewApiPage() {
 
   return (
     <div className="max-w-lg">
-      <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">Connect a Google Sheet</h1>
+      <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">Conectar uma Google Sheet</h1>
       <p className="text-[var(--text-muted)] text-sm mb-6">
-        Paste the URL of your Google Sheet to create an API.
+        Cole a URL da sua Google Sheet para criar uma API.
       </p>
 
       {user && !user.googleConnected && (
         <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-6 flex items-center justify-between">
           <span className="text-[var(--text-secondary)] text-sm">
-            You need to authorize Google access first.
+            Você precisa autorizar o acesso ao Google primeiro.
           </span>
           <button
             onClick={handleAuthorizeGoogle}
             className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)]"
           >
-            Authorize
+            Autorizar
           </button>
         </div>
       )}
@@ -67,7 +67,7 @@ export default function NewApiPage() {
 
         <div>
           <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
-            API Name
+            Nome da API
           </label>
           <input
             type="text"
@@ -75,13 +75,13 @@ export default function NewApiPage() {
             onChange={(e) => setName(e.target.value)}
             required
             className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]"
-            placeholder="e.g. Products, Users, Orders"
+            placeholder="ex.: Produtos, Usuários, Pedidos"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
-            Google Sheet URL
+            URL da Google Sheet
           </label>
           <input
             type="text"
@@ -92,7 +92,7 @@ export default function NewApiPage() {
             placeholder="https://docs.google.com/spreadsheets/d/..."
           />
           <p className="text-xs text-[var(--text-muted)] mt-1.5">
-            Paste the full URL of your Google Sheet
+            Cole a URL completa da sua Google Sheet
           </p>
         </div>
 
@@ -101,7 +101,7 @@ export default function NewApiPage() {
           disabled={loading || !!(user && !user.googleConnected)}
           className="w-full bg-[var(--accent)] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
         >
-          {loading ? "Connecting..." : "Connect Sheet"}
+          {loading ? "Conectando..." : "Conectar Planilha"}
         </button>
       </form>
     </div>

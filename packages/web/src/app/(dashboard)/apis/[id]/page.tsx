@@ -28,20 +28,20 @@ export default function ApiDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
-  if (!sheetApi) return <div className="text-red-400">API not found.</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Carregando...</div>;
+  if (!sheetApi) return <div className="text-red-400">API não encontrada.</div>;
 
   const endpoint = `${API_URL}/api/v1/${sheetApi.id}`;
   const tabs: { key: Tab; label: string }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "settings", label: "Settings" },
-    { key: "keys", label: "API Keys" },
-    { key: "usage", label: "Usage" },
+    { key: "overview", label: "Visão Geral" },
+    { key: "settings", label: "Configurações" },
+    { key: "keys", label: "Chaves de API" },
+    { key: "usage", label: "Uso" },
     { key: "playground", label: "Playground" },
-    { key: "computed", label: "Computed" },
+    { key: "computed", label: "Calculados" },
     { key: "snapshots", label: "Snapshots" },
-    { key: "sync", label: "Sync" },
-    { key: "spreadsheets", label: "Sheets" },
+    { key: "sync", label: "Sincronização" },
+    { key: "spreadsheets", label: "Planilhas" },
   ];
 
   const handleDelete = async () => {
@@ -50,7 +50,7 @@ export default function ApiDetailPage() {
       await api.deleteApi(id);
       router.push("/apis");
     } catch (err: any) {
-      alert("Failed to delete: " + (err.message || "Unknown error"));
+      alert("Falha ao excluir: " + (err.message || "Erro desconhecido"));
       setDeleting(false);
     }
   };
@@ -67,7 +67,7 @@ export default function ApiDetailPage() {
           disabled={deleting}
           className="text-red-400 text-sm hover:text-red-300 transition-colors disabled:opacity-50"
         >
-          {deleting ? "Deleting..." : "Delete API"}
+          {deleting ? "Excluindo..." : "Excluir API"}
         </button>
       </div>
 
@@ -124,7 +124,7 @@ function OverviewTab({ endpoint, sheetApi }: { endpoint: string; sheetApi: any }
   return (
     <div className="space-y-6">
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-        <h2 className="font-semibold text-[var(--text-primary)] mb-3">API Endpoint</h2>
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Endpoint da API</h2>
         <div className="flex items-center gap-2">
           <code className="flex-1 bg-[var(--input-bg)] px-3 py-2 rounded-lg text-sm font-mono text-[var(--text-secondary)] border border-[var(--input-border)]">
             {endpoint}
@@ -133,13 +133,13 @@ function OverviewTab({ endpoint, sheetApi }: { endpoint: string; sheetApi: any }
             onClick={() => copy(endpoint)}
             className="bg-[var(--card-border)] px-4 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--input-border)] transition-colors"
           >
-            {copied ? "Copied!" : "Copy"}
+            {copied ? "Copiado!" : "Copiar"}
           </button>
         </div>
       </div>
 
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Quick Start</h2>
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Início Rápido</h2>
         <div className="flex gap-1 mb-3 flex-wrap">
           {Object.entries(snippets).map(([key, { label }]) => (
             <button key={key} onClick={() => setSnippetLang(key)}
@@ -154,16 +154,16 @@ function OverviewTab({ endpoint, sheetApi }: { endpoint: string; sheetApi: any }
       </div>
 
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Available Endpoints</h2>
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Endpoints Disponíveis</h2>
         <div className="text-sm space-y-2">
           {[
-            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}`, desc: "All rows" },
-            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/search?col=val`, desc: "Search" },
-            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/keys`, desc: "Column names" },
-            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/count`, desc: "Row count" },
-            { method: "POST", color: "text-blue-400 bg-blue-900/30", path: `/${sheetApi.id}`, desc: "Create rows" },
-            { method: "PATCH", color: "text-yellow-400 bg-yellow-900/30", path: `/${sheetApi.id}/:col/:val`, desc: "Update" },
-            { method: "DELETE", color: "text-red-400 bg-red-900/30", path: `/${sheetApi.id}/:col/:val`, desc: "Delete" },
+            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}`, desc: "Todas as linhas" },
+            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/search?col=val`, desc: "Buscar" },
+            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/keys`, desc: "Nomes das colunas" },
+            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/count`, desc: "Contagem de linhas" },
+            { method: "POST", color: "text-blue-400 bg-blue-900/30", path: `/${sheetApi.id}`, desc: "Criar linhas" },
+            { method: "PATCH", color: "text-yellow-400 bg-yellow-900/30", path: `/${sheetApi.id}/:col/:val`, desc: "Atualizar" },
+            { method: "DELETE", color: "text-red-400 bg-red-900/30", path: `/${sheetApi.id}/:col/:val`, desc: "Excluir" },
           ].map((ep, i) => (
             <div key={i} className="flex gap-3 items-center">
               <span className={`${ep.color} px-2 py-0.5 rounded text-xs font-mono font-bold w-16 text-center`}>
@@ -200,10 +200,10 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
         cacheTtlSeconds: cacheTtl, rateLimitRpm,
         bearerToken: bearerToken || null,
       });
-      setMsg("Settings saved!");
+      setMsg("Configurações salvas!");
       onUpdate();
     } catch (err: any) {
-      setMsg(err.message || "Failed to save");
+      setMsg(err.message || "Falha ao salvar");
     } finally {
       setSaving(false);
     }
@@ -212,24 +212,24 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
   return (
     <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-6 max-w-lg space-y-5">
       {msg && (
-        <div className={`text-sm rounded-lg p-3 ${msg.includes("saved") ? "bg-green-900/30 border border-green-700 text-green-400" : "bg-red-900/30 border border-red-700 text-red-400"}`}>
+        <div className={`text-sm rounded-lg p-3 ${msg.includes("salvas") ? "bg-green-900/30 border border-green-700 text-green-400" : "bg-red-900/30 border border-red-700 text-red-400"}`}>
           {msg}
         </div>
       )}
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Name</label>
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Nome</label>
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Permissions</label>
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Permissões</label>
         <div className="space-y-2">
           {[
-            { label: "Read", value: allowRead, set: setAllowRead },
-            { label: "Create", value: allowCreate, set: setAllowCreate },
-            { label: "Update", value: allowUpdate, set: setAllowUpdate },
-            { label: "Delete", value: allowDelete, set: setAllowDelete },
+            { label: "Leitura", value: allowRead, set: setAllowRead },
+            { label: "Criação", value: allowCreate, set: setAllowCreate },
+            { label: "Atualização", value: allowUpdate, set: setAllowUpdate },
+            { label: "Exclusão", value: allowDelete, set: setAllowDelete },
           ].map((perm) => (
             <label key={perm.label} className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
               <input type="checkbox" checked={perm.value} onChange={(e) => perm.set(e.target.checked)} className="rounded bg-[var(--input-bg)] border-[var(--input-border)]" />
@@ -240,23 +240,23 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Cache TTL (seconds)</label>
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Cache TTL (segundos)</label>
         <input type="number" value={cacheTtl} onChange={(e) => setCacheTtl(Number(e.target.value))} min={0} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Rate Limit (requests/min)</label>
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Limite de Requisições (req/min)</label>
         <input type="number" value={rateLimitRpm} onChange={(e) => setRateLimitRpm(Number(e.target.value))} min={1} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Bearer Token (optional)</label>
-        <input type="text" value={bearerToken} onChange={(e) => setBearerToken(e.target.value)} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]" placeholder="Leave empty for public access" />
-        <p className="text-xs text-[var(--text-muted)] mt-1.5">If set, requests must include Authorization: Bearer &lt;token&gt;</p>
+        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Bearer Token (opcional)</label>
+        <input type="text" value={bearerToken} onChange={(e) => setBearerToken(e.target.value)} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]" placeholder="Deixe vazio para acesso público" />
+        <p className="text-xs text-[var(--text-muted)] mt-1.5">Se definido, as requisições devem incluir Authorization: Bearer &lt;token&gt;</p>
       </div>
 
       <button onClick={handleSave} disabled={saving} className="bg-[var(--accent)] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-        {saving ? "Saving..." : "Save Settings"}
+        {saving ? "Salvando..." : "Salvar Configurações"}
       </button>
     </div>
   );
@@ -285,11 +285,11 @@ function KeysTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => void }
   return (
     <div className="space-y-4 max-w-lg">
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Create API Key</h2>
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Criar Chave de API</h2>
         <div className="flex gap-2">
-          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" placeholder="Label (optional)" />
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" placeholder="Rótulo (opcional)" />
           <button onClick={handleCreate} disabled={creating} className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-            Create
+            Criar
           </button>
         </div>
       </div>
@@ -301,16 +301,16 @@ function KeysTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => void }
               <div>
                 <code className="text-sm font-mono bg-[var(--input-bg)] px-2 py-1 rounded text-[var(--text-secondary)]">{k.key}</code>
                 {k.label && <span className="ml-2 text-xs text-[var(--text-muted)]">{k.label}</span>}
-                <div className="text-xs text-[var(--text-faint)] mt-1">Created {new Date(k.createdAt).toLocaleDateString()}</div>
+                <div className="text-xs text-[var(--text-faint)] mt-1">Criado em {new Date(k.createdAt).toLocaleDateString()}</div>
               </div>
               <button onClick={() => handleDelete(k.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">
-                Revoke
+                Revogar
               </button>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-[var(--text-muted)]">No API keys yet.</p>
+        <p className="text-sm text-[var(--text-muted)]">Nenhuma chave de API ainda.</p>
       )}
     </div>
   );
@@ -331,8 +331,8 @@ function UsageTab({ apiId }: { apiId: string }) {
       .finally(() => setLoading(false));
   }, [apiId, days]);
 
-  if (loading) return <div className="text-[var(--text-tertiary)]">Loading usage...</div>;
-  if (!usage) return <div className="text-[var(--text-muted)]">No data.</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Carregando uso...</div>;
+  if (!usage) return <div className="text-[var(--text-muted)]">Sem dados.</div>;
 
   return (
     <div className="space-y-4">
@@ -349,15 +349,15 @@ function UsageTab({ apiId }: { apiId: string }) {
       {/* Stats cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-          <p className="text-sm text-[var(--text-muted)] mb-1">Total Requests</p>
+          <p className="text-sm text-[var(--text-muted)] mb-1">Total de Requisições</p>
           <p className="text-3xl font-bold text-[var(--text-primary)]">{usage.total}</p>
         </div>
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-          <p className="text-sm text-[var(--text-muted)] mb-1">Period Requests</p>
+          <p className="text-sm text-[var(--text-muted)] mb-1">Requisições no Período</p>
           <p className="text-3xl font-bold text-[var(--text-primary)]">{chart?.total ?? 0}</p>
         </div>
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-          <p className="text-sm text-[var(--text-muted)] mb-1">Avg Response</p>
+          <p className="text-sm text-[var(--text-muted)] mb-1">Resposta Média</p>
           <p className="text-3xl font-bold text-[var(--text-primary)]">
             {chart?.timeline?.length ? Math.round(chart.timeline.reduce((s: number, t: any) => s + t.avgMs, 0) / chart.timeline.length) : 0}ms
           </p>
@@ -367,7 +367,7 @@ function UsageTab({ apiId }: { apiId: string }) {
       {/* Timeline chart */}
       {chart?.timeline?.length > 0 && (
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-          <h2 className="font-semibold text-[var(--text-primary)] mb-4">Requests over time</h2>
+          <h2 className="font-semibold text-[var(--text-primary)] mb-4">Requisições ao longo do tempo</h2>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={chart.timeline}>
               <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} />
@@ -384,7 +384,7 @@ function UsageTab({ apiId }: { apiId: string }) {
         <div className="grid gap-4 sm:grid-cols-2">
           {chart?.methods?.length > 0 && (
             <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-              <h2 className="font-semibold text-[var(--text-primary)] mb-4">By Method</h2>
+              <h2 className="font-semibold text-[var(--text-primary)] mb-4">Por Método</h2>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={chart.methods}>
                   <XAxis dataKey="method" tick={{ fill: "#6b7280", fontSize: 11 }} />
@@ -397,7 +397,7 @@ function UsageTab({ apiId }: { apiId: string }) {
           )}
           {chart?.statuses?.length > 0 && (
             <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-              <h2 className="font-semibold text-[var(--text-primary)] mb-4">By Status</h2>
+              <h2 className="font-semibold text-[var(--text-primary)] mb-4">Por Status</h2>
               <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
                   <Pie data={chart.statuses} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={65} label={(e: any) => `${e.status}: ${e.count}`}>
@@ -416,15 +416,15 @@ function UsageTab({ apiId }: { apiId: string }) {
       {/* Recent requests table */}
       {usage.recent.length > 0 && (
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg overflow-hidden">
-          <h2 className="font-semibold text-[var(--text-primary)] px-4 py-3 border-b border-[var(--card-border)]">Recent Requests</h2>
+          <h2 className="font-semibold text-[var(--text-primary)] px-4 py-3 border-b border-[var(--card-border)]">Requisições Recentes</h2>
           <table className="w-full text-sm">
             <thead className="bg-[var(--sidebar-bg)] text-[var(--text-muted)] text-xs">
               <tr>
-                <th className="text-left px-4 py-2.5">Method</th>
-                <th className="text-left px-4 py-2.5">Path</th>
+                <th className="text-left px-4 py-2.5">Método</th>
+                <th className="text-left px-4 py-2.5">Caminho</th>
                 <th className="text-left px-4 py-2.5">Status</th>
-                <th className="text-left px-4 py-2.5">Time</th>
-                <th className="text-left px-4 py-2.5">Date</th>
+                <th className="text-left px-4 py-2.5">Tempo</th>
+                <th className="text-left px-4 py-2.5">Data</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--card-border)]">
@@ -501,7 +501,7 @@ function PlaygroundTab({ endpoint }: { endpoint: string }) {
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-        <h2 className="font-semibold text-[var(--text-primary)] mb-4">API Playground</h2>
+        <h2 className="font-semibold text-[var(--text-primary)] mb-4">Playground da API</h2>
 
         {/* Method + Path */}
         <div className="flex gap-2 mb-3">
@@ -516,13 +516,13 @@ function PlaygroundTab({ endpoint }: { endpoint: string }) {
           </div>
           <button onClick={handleSend} disabled={loading}
             className="bg-[var(--accent)] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-            {loading ? "..." : "Send"}
+            {loading ? "..." : "Enviar"}
           </button>
         </div>
 
         {/* Headers */}
         <div className="mb-3">
-          <label className="block text-xs text-[var(--text-muted)] mb-1">Headers (one per line, Key: Value)</label>
+          <label className="block text-xs text-[var(--text-muted)] mb-1">Headers (um por linha, Chave: Valor)</label>
           <textarea value={headers} onChange={(e) => setHeaders(e.target.value)} rows={2}
             className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]"
             placeholder="Authorization: Bearer token123" />
@@ -531,7 +531,7 @@ function PlaygroundTab({ endpoint }: { endpoint: string }) {
         {/* Body */}
         {method !== "GET" && (
           <div className="mb-3">
-            <label className="block text-xs text-[var(--text-muted)] mb-1">Body (JSON)</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Corpo (JSON)</label>
             <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5}
               className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-xs text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]" />
           </div>
@@ -543,7 +543,7 @@ function PlaygroundTab({ endpoint }: { endpoint: string }) {
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
           <div className="flex items-center gap-3 mb-3">
             <span className={`text-sm font-bold ${response.status >= 200 && response.status < 400 ? "text-green-400" : "text-red-400"}`}>
-              {response.status || "Error"}
+              {response.status || "Erro"}
             </span>
             <span className="text-xs text-[var(--text-muted)]">{response.time}ms</span>
           </div>
@@ -579,9 +579,9 @@ function ComputedFieldsTab({ apiId }: { apiId: string }) {
       setName("");
       setExpression("");
       load();
-      setMsg("Field created!");
+      setMsg("Campo criado!");
     } catch (err: any) {
-      setMsg(err.message || "Failed");
+      setMsg(err.message || "Falha");
     } finally {
       setCreating(false);
     }
@@ -592,28 +592,28 @@ function ComputedFieldsTab({ apiId }: { apiId: string }) {
     load();
   };
 
-  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Carregando...</div>;
 
   return (
     <div className="space-y-4 max-w-2xl">
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Add Computed Field</h2>
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Adicionar Campo Calculado</h2>
         <p className="text-xs text-[var(--text-muted)] mb-3">
-          Use {"{{columnName}}"} to reference columns. Supports templates and math: {"{{price}} * {{qty}}"}, {"{{first}} {{last}}"}
+          Use {"{{nomeColuna}}"} para referenciar colunas. Suporta templates e matemática: {"{{preco}} * {{qtd}}"}, {"{{primeiro}} {{ultimo}}"}
         </p>
         {msg && (
-          <div className={`text-sm rounded-lg p-2 mb-3 ${msg.includes("created") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
+          <div className={`text-sm rounded-lg p-2 mb-3 ${msg.includes("criado") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
         )}
         <div className="flex gap-2 mb-2">
           <input type="text" value={name} onChange={(e) => setName(e.target.value)}
             className="w-40 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]"
-            placeholder="Field name" />
+            placeholder="Nome do campo" />
           <input type="text" value={expression} onChange={(e) => setExpression(e.target.value)}
             className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]"
-            placeholder="{{price}} * {{quantity}}" />
+            placeholder="{{preco}} * {{quantidade}}" />
           <button onClick={handleCreate} disabled={creating}
             className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-            Add
+            Adicionar
           </button>
         </div>
       </div>
@@ -626,12 +626,12 @@ function ComputedFieldsTab({ apiId }: { apiId: string }) {
                 <span className="text-sm font-medium text-[var(--text-primary)]">{f.name}</span>
                 <code className="ml-3 text-xs text-[var(--text-tertiary)] bg-[var(--input-bg)] px-2 py-1 rounded">{f.expression}</code>
               </div>
-              <button onClick={() => handleDelete(f.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Remove</button>
+              <button onClick={() => handleDelete(f.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Remover</button>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-[var(--text-muted)]">No computed fields yet. They appear as virtual columns in API responses.</p>
+        <p className="text-sm text-[var(--text-muted)]">Nenhum campo calculado ainda. Eles aparecem como colunas virtuais nas respostas da API.</p>
       )}
     </div>
   );
@@ -670,7 +670,7 @@ function SnapshotsTab({ apiId }: { apiId: string }) {
     load();
   };
 
-  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Carregando...</div>;
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -679,11 +679,11 @@ function SnapshotsTab({ apiId }: { apiId: string }) {
           <h2 className="font-semibold text-[var(--text-primary)]">Snapshots</h2>
           <button onClick={handleCreate} disabled={creating}
             className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-            {creating ? "Creating..." : "Create Snapshot"}
+            {creating ? "Criando..." : "Criar Snapshot"}
           </button>
         </div>
         <p className="text-xs text-[var(--text-muted)]">
-          Snapshots save the current state of your data. Access via API: <code className="text-[var(--text-tertiary)]">?version=N</code>
+          Snapshots salvam o estado atual dos seus dados. Acesse via API: <code className="text-[var(--text-tertiary)]">?version=N</code>
         </p>
       </div>
 
@@ -693,26 +693,26 @@ function SnapshotsTab({ apiId }: { apiId: string }) {
             <div key={s.id} className="p-4 flex items-center justify-between">
               <div>
                 <span className="text-sm font-bold text-[var(--text-primary)]">v{s.version}</span>
-                <span className="ml-3 text-xs text-[var(--text-tertiary)]">{s.rowCount} rows, {s.headers.length} columns</span>
+                <span className="ml-3 text-xs text-[var(--text-tertiary)]">{s.rowCount} linhas, {s.headers.length} colunas</span>
                 {s.sheetName && <span className="ml-2 text-xs text-[var(--text-muted)]">({s.sheetName})</span>}
                 <div className="text-xs text-[var(--text-faint)] mt-0.5">{new Date(s.createdAt).toLocaleString()}</div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => handleView(s.version)} className="text-[var(--accent-light)] text-xs hover:text-[var(--accent-lighter)] transition-colors">View</button>
-                <button onClick={() => handleDelete(s.version)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Delete</button>
+                <button onClick={() => handleView(s.version)} className="text-[var(--accent-light)] text-xs hover:text-[var(--accent-lighter)] transition-colors">Ver</button>
+                <button onClick={() => handleDelete(s.version)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Excluir</button>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-[var(--text-muted)]">No snapshots yet.</p>
+        <p className="text-sm text-[var(--text-muted)]">Nenhum snapshot ainda.</p>
       )}
 
       {viewData && (
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-[var(--text-primary)]">Snapshot v{viewData.version} Data</h3>
-            <button onClick={() => setViewData(null)} className="text-[var(--text-tertiary)] text-xs hover:text-[var(--text-primary)]">Close</button>
+            <h3 className="font-semibold text-[var(--text-primary)]">Dados do Snapshot v{viewData.version}</h3>
+            <button onClick={() => setViewData(null)} className="text-[var(--text-tertiary)] text-xs hover:text-[var(--text-primary)]">Fechar</button>
           </div>
           <pre className="bg-[var(--sidebar-bg)] border border-[var(--card-border)] rounded-lg p-3 text-xs text-[var(--text-secondary)] font-mono overflow-auto max-h-[400px]">
             {JSON.stringify(viewData.data, null, 2)}
@@ -745,9 +745,9 @@ function SyncTab({ apiId }: { apiId: string }) {
         syncEnabled,
         syncCron: syncCron || null,
       });
-      setMsg("Sync settings saved!");
+      setMsg("Configurações de sincronização salvas!");
     } catch (err: any) {
-      setMsg(err.message || "Failed");
+      setMsg(err.message || "Falha");
     } finally {
       setSaving(false);
     }
@@ -758,45 +758,45 @@ function SyncTab({ apiId }: { apiId: string }) {
       const result = await api.triggerSync(apiId);
       setMsg(result.message);
     } catch (err: any) {
-      setMsg(err.message || "Failed");
+      setMsg(err.message || "Falha");
     }
   };
 
-  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Carregando...</div>;
 
   return (
     <div className="space-y-4 max-w-lg">
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5 space-y-4">
-        <h2 className="font-semibold text-[var(--text-primary)]">Scheduled Sync</h2>
+        <h2 className="font-semibold text-[var(--text-primary)]">Sincronização Agendada</h2>
         <p className="text-xs text-[var(--text-muted)]">
-          Automatically invalidate cache on a schedule so API responses stay fresh.
+          Invalide o cache automaticamente em um agendamento para que as respostas da API permaneçam atualizadas.
         </p>
 
         {msg && (
-          <div className={`text-sm rounded-lg p-2 ${msg.includes("saved") || msg.includes("Cache") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
+          <div className={`text-sm rounded-lg p-2 ${msg.includes("salvas") || msg.includes("Cache") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
         )}
 
         <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
           <input type="checkbox" checked={syncEnabled} onChange={(e) => setSyncEnabled(e.target.checked)} className="rounded bg-[var(--input-bg)] border-[var(--input-border)]" />
-          Enable scheduled sync
+          Ativar sincronização agendada
         </label>
 
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Cron Expression</label>
+          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Expressão Cron</label>
           <input type="text" value={syncCron} onChange={(e) => setSyncCron(e.target.value)}
             className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] font-mono focus:outline-none focus:border-[var(--accent)]"
             placeholder="*/15 * * * *" />
-          <p className="text-xs text-[var(--text-faint)] mt-1">Examples: <code>*/15 * * * *</code> (every 15 min), <code>0 * * * *</code> (hourly), <code>0 0 * * *</code> (daily)</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">Exemplos: <code>*/15 * * * *</code> (a cada 15 min), <code>0 * * * *</code> (por hora), <code>0 0 * * *</code> (diário)</p>
         </div>
 
         <div className="flex gap-2">
           <button onClick={handleSave} disabled={saving}
             className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-            {saving ? "Saving..." : "Save"}
+            {saving ? "Salvando..." : "Salvar"}
           </button>
           <button onClick={handleTrigger}
             className="bg-[var(--card-border)] text-[var(--text-secondary)] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--input-border)] transition-colors">
-            Sync Now
+            Sincronizar Agora
           </button>
         </div>
       </div>
@@ -831,9 +831,9 @@ function SpreadsheetsTab({ apiId }: { apiId: string }) {
       setUrl("");
       setLabel("");
       load();
-      setMsg("Spreadsheet linked!");
+      setMsg("Planilha vinculada!");
     } catch (err: any) {
-      setMsg(err.message || "Failed");
+      setMsg(err.message || "Falha");
     } finally {
       setAdding(false);
     }
@@ -844,31 +844,31 @@ function SpreadsheetsTab({ apiId }: { apiId: string }) {
     load();
   };
 
-  if (loading) return <div className="text-[var(--text-tertiary)]">Loading...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Carregando...</div>;
 
   return (
     <div className="space-y-4 max-w-2xl">
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Multi-Spreadsheet</h2>
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Múltiplas Planilhas</h2>
         <p className="text-xs text-[var(--text-muted)] mb-3">
-          Link additional Google Sheets to this API. Access them via <code className="text-[var(--text-tertiary)]">?source=&lt;id&gt;</code> query param.
+          Vincule Google Sheets adicionais a esta API. Acesse-as via parâmetro <code className="text-[var(--text-tertiary)]">?source=&lt;id&gt;</code>.
         </p>
 
         {msg && (
-          <div className={`text-sm rounded-lg p-2 mb-3 ${msg.includes("linked") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
+          <div className={`text-sm rounded-lg p-2 mb-3 ${msg.includes("vinculada") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
         )}
 
         <div className="space-y-2 mb-3">
           <input type="text" value={label} onChange={(e) => setLabel(e.target.value)}
             className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]"
-            placeholder="Label (e.g., Orders 2024)" />
+            placeholder="Rótulo (ex.: Pedidos 2024)" />
           <div className="flex gap-2">
             <input type="text" value={url} onChange={(e) => setUrl(e.target.value)}
               className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]"
-              placeholder="Google Sheets URL or ID" />
+              placeholder="URL ou ID do Google Sheets" />
             <button onClick={handleAdd} disabled={adding}
               className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-              Link
+              Vincular
             </button>
           </div>
         </div>
@@ -880,7 +880,7 @@ function SpreadsheetsTab({ apiId }: { apiId: string }) {
           <div className="p-4 flex items-center justify-between">
             <div>
               <span className="text-sm font-medium text-[var(--text-primary)]">{primary.label}</span>
-              <span className="ml-2 text-xs bg-[var(--accent-bg)] text-[var(--accent-light)] px-2 py-0.5 rounded">Primary</span>
+              <span className="ml-2 text-xs bg-[var(--accent-bg)] text-[var(--accent-light)] px-2 py-0.5 rounded">Principal</span>
               <div className="text-xs text-[var(--text-muted)] font-mono mt-0.5">{primary.spreadsheetId}</div>
             </div>
           </div>
@@ -895,7 +895,7 @@ function SpreadsheetsTab({ apiId }: { apiId: string }) {
                 ID: <code className="text-[var(--text-tertiary)]">{s.id}</code>
               </div>
             </div>
-            <button onClick={() => handleRemove(s.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Unlink</button>
+            <button onClick={() => handleRemove(s.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Desvincular</button>
           </div>
         ))}
       </div>

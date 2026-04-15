@@ -32,17 +32,17 @@ export function useOnboarding() {
         steps: [
           {
             popover: {
-              title: "Welcome to sheets.banco!",
+              title: "Bem-vindo ao sheets.banco!",
               description:
-                "Turn any Google Sheet into a full REST API in seconds. Let us show you around.",
+                "Transforme qualquer Google Sheet em uma API REST completa em segundos. Vamos fazer um tour.",
             },
           },
           {
             element: "[data-onboard='nav-apis']",
             popover: {
-              title: "Your APIs",
+              title: "Suas APIs",
               description:
-                "This is your main dashboard. All your connected Google Sheets APIs appear here.",
+                "Este é o seu painel principal. Todas as suas APIs conectadas ao Google Sheets aparecem aqui.",
               side: "right",
               align: "center",
             },
@@ -50,9 +50,9 @@ export function useOnboarding() {
           {
             element: "[data-onboard='nav-stats']",
             popover: {
-              title: "Statistics",
+              title: "Estatísticas",
               description:
-                "View usage analytics, request counts, and performance metrics across all your APIs.",
+                "Veja análises de uso, contagem de requisições e métricas de desempenho de todas as suas APIs.",
               side: "right",
               align: "center",
             },
@@ -60,9 +60,9 @@ export function useOnboarding() {
           {
             element: "[data-onboard='theme-toggle']",
             popover: {
-              title: "Theme Toggle",
+              title: "Alternar Tema",
               description:
-                "Switch between dark and light mode to suit your preference.",
+                "Alterne entre o modo escuro e claro conforme sua preferência.",
               side: "right",
               align: "center",
             },
@@ -70,18 +70,18 @@ export function useOnboarding() {
           {
             element: "[data-onboard='create-api']",
             popover: {
-              title: "Create Your First API",
+              title: "Crie Sua Primeira API",
               description:
-                'Click here to connect a Google Sheet. Just paste the URL and give it a name — your REST API is ready instantly.',
+                'Clique aqui para conectar uma Google Sheet. Basta colar a URL e dar um nome — sua API REST estará pronta instantaneamente.',
               side: "bottom",
               align: "end",
             },
           },
           {
             popover: {
-              title: "You're All Set!",
+              title: "Tudo Pronto!",
               description:
-                "Create your first API to get started. You'll get endpoints for reading, creating, updating, and deleting data — plus features like caching, webhooks, API keys, and more.",
+                "Crie sua primeira API para começar. Você terá endpoints para ler, criar, atualizar e excluir dados — além de recursos como cache, webhooks, chaves de API e muito mais.",
             },
           },
         ],

@@ -23,7 +23,7 @@ export default function LoginPage() {
       await login(email, password);
       router.push("/apis");
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err.message || "Falha ao entrar");
     } finally {
       setLoading(false);
     }
@@ -44,7 +44,7 @@ export default function LoginPage() {
         </div>
         <h1 className="text-2xl font-bold text-center text-[var(--accent)] mb-1.5">sheets.banco</h1>
         <p className="text-[var(--accent-light)] text-center mb-10 text-sm">
-          Sign in to manage your APIs
+          Entre para gerenciar suas APIs
         </p>
 
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-6 space-y-4">
@@ -65,7 +65,7 @@ export default function LoginPage() {
                 <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="12" r="10" stroke="#4285F4" strokeWidth="3" strokeLinecap="round" strokeDasharray="31.4 31.4" />
                 </svg>
-                Connecting to Google...
+                Conectando ao Google...
               </>
             ) : (
               <>
@@ -75,38 +75,38 @@ export default function LoginPage() {
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                 </svg>
-                Sign in with Google
+                Entrar com Google
               </>
             )}
           </button>
 
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-[var(--card-border)]" />
-            <span className="text-xs text-[var(--text-muted)]">or</span>
+            <span className="text-xs text-[var(--text-muted)]">ou</span>
             <div className="flex-1 h-px bg-[var(--card-border)]" />
           </div>
 
-          {/* Email/Password */}
+          {/* Email/Senha */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="you@example.com" />
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">E-mail</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="voce@exemplo.com" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Password</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="Min. 6 characters" />
+              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Senha</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="Mín. 6 caracteres" />
             </div>
 
             <button type="submit" disabled={loading} className="w-full bg-[var(--accent)] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? "Entrando..." : "Entrar"}
             </button>
           </form>
         </div>
 
         <p className="text-center text-sm text-[var(--text-muted)] mt-4">
-          Don&apos;t have an account?{" "}
-          <Link href="/register" className="text-[var(--accent-light)] hover:underline">Sign up</Link>
+          Não tem uma conta?{" "}
+          <Link href="/register" className="text-[var(--accent-light)] hover:underline">Criar conta</Link>
         </p>
       </div>
     </div>

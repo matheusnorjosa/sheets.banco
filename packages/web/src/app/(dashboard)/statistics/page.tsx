@@ -20,26 +20,26 @@ export default function StatisticsPage() {
     });
   }, []);
 
-  if (loading) return <div className="text-[var(--text-tertiary)]">Loading statistics...</div>;
+  if (loading) return <div className="text-[var(--text-tertiary)]">Carregando estatísticas...</div>;
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">Statistics and usage</h1>
-      <p className="text-[var(--text-muted)] text-sm mb-6">For all your APIs.</p>
+      <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">Estatísticas e uso</h1>
+      <p className="text-[var(--text-muted)] text-sm mb-6">De todas as suas APIs.</p>
 
       <div className="grid gap-4 sm:grid-cols-3 mb-6">
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-6">
-          <p className="text-sm text-[var(--text-muted)] mb-1">Total Requests</p>
+          <p className="text-sm text-[var(--text-muted)] mb-1">Total de Requisições</p>
           <p className="text-3xl font-bold text-[var(--text-primary)]">{totalRequests.toLocaleString()}</p>
         </div>
 
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-6">
-          <p className="text-sm text-[var(--text-muted)] mb-1">Spreadsheet APIs</p>
+          <p className="text-sm text-[var(--text-muted)] mb-1">APIs de Planilhas</p>
           <p className="text-3xl font-bold text-[var(--text-primary)]">{apis.length}</p>
         </div>
 
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-6">
-          <p className="text-sm text-[var(--text-muted)] mb-1">API Keys</p>
+          <p className="text-sm text-[var(--text-muted)] mb-1">Chaves de API</p>
           <p className="text-3xl font-bold text-[var(--text-primary)]">
             {apis.reduce((sum, a) => sum + (a._count?.apiKeys ?? 0), 0)}
           </p>
@@ -51,10 +51,10 @@ export default function StatisticsPage() {
           <table className="w-full text-sm">
             <thead className="bg-[var(--sidebar-bg)] text-[var(--text-muted)] text-xs">
               <tr>
-                <th className="text-left px-4 py-2.5">API Name</th>
-                <th className="text-left px-4 py-2.5">Requests</th>
-                <th className="text-left px-4 py-2.5">API Keys</th>
-                <th className="text-left px-4 py-2.5">Created</th>
+                <th className="text-left px-4 py-2.5">Nome da API</th>
+                <th className="text-left px-4 py-2.5">Requisições</th>
+                <th className="text-left px-4 py-2.5">Chaves de API</th>
+                <th className="text-left px-4 py-2.5">Criado em</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--card-border)]">

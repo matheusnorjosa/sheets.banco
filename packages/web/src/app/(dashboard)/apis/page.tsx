@@ -58,7 +58,7 @@ export default function ApisPage() {
   );
 
   if (loading) {
-    return <div className="text-[var(--text-tertiary)]">Loading APIs...</div>;
+    return <div className="text-[var(--text-tertiary)]">Carregando APIs...</div>;
   }
 
   return (
@@ -66,12 +66,12 @@ export default function ApisPage() {
       {/* Google connection banners */}
       {googleStatus === "connected" && (
         <div className="bg-green-900/30 border border-green-700 text-green-400 rounded-lg p-3 mb-4 text-sm">
-          Google account connected successfully!
+          Conta Google conectada com sucesso!
         </div>
       )}
       {googleStatus === "error" && (
         <div className="bg-red-900/30 border border-red-700 text-red-400 rounded-lg p-3 mb-4 text-sm">
-          Failed to connect Google account. Please try again.
+          Falha ao conectar conta Google. Por favor, tente novamente.
         </div>
       )}
 
@@ -83,14 +83,14 @@ export default function ApisPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
             <span className="text-[var(--text-secondary)] text-sm">
-              To use sheets.banco, we need access to your Google Sheets. Please click &quot;Authorize&quot; to grant permission.
+              Para usar o sheets.banco, precisamos de acesso ao seu Google Sheets. Por favor, clique em &quot;Autorizar&quot; para conceder permissão.
             </span>
           </div>
           <button
             onClick={handleAuthorizeGoogle}
             className="bg-[var(--accent)] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors whitespace-nowrap"
           >
-            Authorize
+            Autorizar
           </button>
         </div>
       )}
@@ -99,14 +99,14 @@ export default function ApisPage() {
       <div className="flex items-center justify-between mb-2">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">APIs</h1>
-          <p className="text-[var(--text-muted)] text-sm">A list of all your APIs.</p>
+          <p className="text-[var(--text-muted)] text-sm">Uma lista de todas as suas APIs.</p>
         </div>
         <Link
           href="/apis/new"
           data-onboard="create-api"
           className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors flex items-center gap-2"
         >
-          <span>+</span> Create new API
+          <span>+</span> Criar nova API
         </Link>
       </div>
 
@@ -119,7 +119,7 @@ export default function ApisPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder='Search your APIs (Press "/" to focus)'
+          placeholder='Buscar suas APIs (Pressione "/" para focar)'
           className="w-full max-w-md bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg pl-10 pr-4 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)] transition-colors"
         />
       </div>
@@ -130,15 +130,15 @@ export default function ApisPage() {
           <div className="w-12 h-12 mx-auto mb-4 rounded-lg border-2 border-dashed border-[var(--card-border)] flex items-center justify-center">
             <span className="text-2xl text-[var(--text-muted)]">+</span>
           </div>
-          <p className="text-[var(--text-tertiary)] font-medium mb-1">No APIs</p>
+          <p className="text-[var(--text-tertiary)] font-medium mb-1">Nenhuma API</p>
           <p className="text-[var(--text-muted)] text-sm mb-4">
-            Get started by creating a new API.
+            Comece criando uma nova API.
           </p>
           <Link
             href="/apis/new"
             className="inline-flex items-center gap-2 bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors"
           >
-            <span>+</span> Create new API
+            <span>+</span> Criar nova API
           </Link>
         </div>
       ) : (
@@ -160,17 +160,17 @@ export default function ApisPage() {
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  {item._count.usageLogs} requests
+                  {item._count.usageLogs} requisições
                 </span>
                 <span className="flex items-center gap-1">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                   </svg>
-                  {item._count.apiKeys} keys
+                  {item._count.apiKeys} chaves
                 </span>
               </div>
               <div className="text-xs text-[var(--text-faint)] mt-3">
-                Created {new Date(item.createdAt).toLocaleDateString()}
+                Criado em {new Date(item.createdAt).toLocaleDateString()}
               </div>
             </Link>
           ))}

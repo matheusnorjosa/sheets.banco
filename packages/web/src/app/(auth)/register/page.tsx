@@ -22,7 +22,7 @@ export default function RegisterPage() {
       await register(email, password, name || undefined);
       router.push("/apis");
     } catch (err: any) {
-      setError(err.message || "Registration failed");
+      setError(err.message || "Falha ao criar conta");
     } finally {
       setLoading(false);
     }
@@ -35,7 +35,7 @@ export default function RegisterPage() {
           <img src="/logo.png" alt="sheets.banco" className="h-20 w-auto" />
         </div>
         <h1 className="text-2xl font-bold text-center text-[var(--accent)] mb-1.5">sheets.banco</h1>
-        <p className="text-[var(--accent-light)] text-center mb-10 text-sm">Create your account</p>
+        <p className="text-[var(--accent-light)] text-center mb-10 text-sm">Crie sua conta</p>
 
         <form onSubmit={handleSubmit} className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-6 space-y-4">
           {error && (
@@ -43,28 +43,28 @@ export default function RegisterPage() {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Name (optional)</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="Your name" />
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Nome (opcional)</label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="Seu nome" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="you@example.com" />
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">E-mail</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="voce@exemplo.com" />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="Min. 6 characters" />
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Senha</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--text-secondary)] placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" placeholder="Mín. 6 caracteres" />
           </div>
 
           <button type="submit" disabled={loading} className="w-full bg-[var(--accent)] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-            {loading ? "Creating account..." : "Create account"}
+            {loading ? "Criando conta..." : "Criar conta"}
           </button>
         </form>
 
         <p className="text-center text-sm text-[var(--text-muted)] mt-4">
-          Already have an account?{" "}
-          <Link href="/login" className="text-[var(--accent-light)] hover:underline">Sign in</Link>
+          Já tem uma conta?{" "}
+          <Link href="/login" className="text-[var(--accent-light)] hover:underline">Entrar</Link>
         </p>
       </div>
     </div>
