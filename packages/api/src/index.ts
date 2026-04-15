@@ -22,6 +22,12 @@ import { webhookRoutes } from './routes/dashboard/webhooks.js';
 import { auth2faRoutes } from './routes/auth-2fa.js';
 import { logsStreamRoutes } from './routes/dashboard/logs-stream.js';
 import { flushAuditLog } from './services/audit.service.js';
+import { computedFieldRoutes } from './routes/dashboard/computed-fields.js';
+import { snapshotRoutes } from './routes/dashboard/snapshots.js';
+import { scheduledSyncRoutes } from './routes/dashboard/scheduled-sync.js';
+import { multiSpreadsheetRoutes } from './routes/dashboard/multi-spreadsheet.js';
+import { initScheduledSyncQueue } from './queues/scheduled-sync.queue.js';
+import { initScheduledSyncWorker, closeScheduledSyncWorker } from './workers/scheduled-sync.worker.js';
 
 const app = Fastify({
   logger: {
@@ -127,6 +133,10 @@ app.register(auth2faRoutes, { prefix: '/auth' });
 app.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
 app.register(webhookRoutes, { prefix: '/dashboard/apis' });
 app.register(logsStreamRoutes, { prefix: '/dashboard/apis' });
+app.register(computedFieldRoutes, { prefix: '/dashboard/apis' });
+app.register(snapshotRoutes, { prefix: '/dashboard/apis' });
+app.register(scheduledSyncRoutes, { prefix: '/dashboard/apis' });
+app.register(multiSpreadsheetRoutes, { prefix: '/dashboard/apis' });
 app.register(sheetsRoutes, { prefix: '/api/v1' });
 app.register(importExportRoutes, { prefix: '/api/v1' });
 app.register((await import('./routes/v1/schema.js')).schemaRoutes, { prefix: '/api/v1' });
@@ -139,6 +149,7 @@ app.addHook('onClose', async () => {
   await flushAuditLog();
   await closeSheetsWriteWorker();
   await closeWebhookDeliveryWorker();
+  await closeScheduledSyncWorker();
 });
 
 // Start
@@ -154,7 +165,23 @@ const start = async () => {
     initSheetsWriteWorker(env.REDIS_URL);
     initWebhookDeliveryQueue(env.REDIS_URL);
     initWebhookDeliveryWorker(env.REDIS_URL);
+    initScheduledSyncQueue(env.REDIS_URL);
+    initScheduledSyncWorker(env.REDIS_URL);
     app.log.info('BullMQ queues and workers started');
+
+    // Restore scheduled sync jobs from database
+    const { prisma } = await import('./lib/prisma.js');
+    const { updateSyncSchedule } = await import('./queues/scheduled-sync.queue.js');
+    const syncApis = await prisma.sheetApi.findMany({
+      where: { syncEnabled: true, syncCron: { not: null } },
+      select: { id: true, syncCron: true, userId: true, spreadsheetId: true },
+    });
+    for (const api of syncApis) {
+      if (api.syncCron && api.userId) {
+        await updateSyncSchedule(api.id, api.syncCron, api.userId, api.spreadsheetId);
+      }
+    }
+    if (syncApis.length > 0) app.log.info(`Restored ${syncApis.length} scheduled sync jobs`);
 
     await app.listen({ port: env.PORT, host: env.HOST });
     app.log.info(`sheets.banco API running on http://${env.HOST}:${env.PORT}`);

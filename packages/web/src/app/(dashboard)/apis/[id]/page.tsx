@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
-type Tab = "overview" | "settings" | "keys" | "usage" | "playground";
+type Tab = "overview" | "settings" | "keys" | "usage" | "playground" | "computed" | "snapshots" | "sync" | "spreadsheets";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -38,6 +38,10 @@ export default function ApiDetailPage() {
     { key: "keys", label: "API Keys" },
     { key: "usage", label: "Usage" },
     { key: "playground", label: "Playground" },
+    { key: "computed", label: "Computed" },
+    { key: "snapshots", label: "Snapshots" },
+    { key: "sync", label: "Sync" },
+    { key: "spreadsheets", label: "Sheets" },
   ];
 
   const handleDelete = async () => {
@@ -89,6 +93,10 @@ export default function ApiDetailPage() {
       {tab === "keys" && <KeysTab sheetApi={sheetApi} onUpdate={reload} />}
       {tab === "usage" && <UsageTab apiId={id} />}
       {tab === "playground" && <PlaygroundTab endpoint={endpoint} />}
+      {tab === "computed" && <ComputedFieldsTab apiId={id} />}
+      {tab === "snapshots" && <SnapshotsTab apiId={id} />}
+      {tab === "sync" && <SyncTab apiId={id} />}
+      {tab === "spreadsheets" && <SpreadsheetsTab apiId={id} />}
     </div>
   );
 }
@@ -544,6 +552,353 @@ function PlaygroundTab({ endpoint }: { endpoint: string }) {
           </pre>
         </div>
       )}
+    </div>
+  );
+}
+
+function ComputedFieldsTab({ apiId }: { apiId: string }) {
+  const [fields, setFields] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [expression, setExpression] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = () => {
+    api.listComputedFields(apiId).then((d) => setFields(d.fields)).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [apiId]);
+
+  const handleCreate = async () => {
+    if (!name || !expression) return;
+    setCreating(true);
+    setMsg("");
+    try {
+      await api.createComputedField(apiId, name, expression);
+      setName("");
+      setExpression("");
+      load();
+      setMsg("Field created!");
+    } catch (err: any) {
+      setMsg(err.message || "Failed");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDelete = async (fieldId: string) => {
+    await api.deleteComputedField(apiId, fieldId);
+    load();
+  };
+
+  if (loading) return <div className="text-gray-400">Loading...</div>;
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+        <h2 className="font-semibold text-white mb-3">Add Computed Field</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Use {"{{columnName}}"} to reference columns. Supports templates and math: {"{{price}} * {{qty}}"}, {"{{first}} {{last}}"}
+        </p>
+        {msg && (
+          <div className={`text-sm rounded-lg p-2 mb-3 ${msg.includes("created") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
+        )}
+        <div className="flex gap-2 mb-2">
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+            className="w-40 bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]"
+            placeholder="Field name" />
+          <input type="text" value={expression} onChange={(e) => setExpression(e.target.value)}
+            className="flex-1 bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 font-mono focus:outline-none focus:border-[#4f46e5]"
+            placeholder="{{price}} * {{quantity}}" />
+          <button onClick={handleCreate} disabled={creating}
+            className="bg-[#4f46e5] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+            Add
+          </button>
+        </div>
+      </div>
+
+      {fields.length > 0 ? (
+        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg divide-y divide-[#2a2a4a]">
+          {fields.map((f: any) => (
+            <div key={f.id} className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-sm font-medium text-white">{f.name}</span>
+                <code className="ml-3 text-xs text-gray-400 bg-[#1e1e3a] px-2 py-1 rounded">{f.expression}</code>
+              </div>
+              <button onClick={() => handleDelete(f.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Remove</button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-gray-500">No computed fields yet. They appear as virtual columns in API responses.</p>
+      )}
+    </div>
+  );
+}
+
+function SnapshotsTab({ apiId }: { apiId: string }) {
+  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [viewData, setViewData] = useState<any>(null);
+
+  const load = () => {
+    api.listSnapshots(apiId).then((d) => setSnapshots(d.snapshots)).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [apiId]);
+
+  const handleCreate = async () => {
+    setCreating(true);
+    try {
+      await api.createSnapshot(apiId);
+      load();
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleView = async (version: number) => {
+    const data = await api.getSnapshot(apiId, version);
+    setViewData(data.snapshot);
+  };
+
+  const handleDelete = async (version: number) => {
+    await api.deleteSnapshot(apiId, version);
+    setViewData(null);
+    load();
+  };
+
+  if (loading) return <div className="text-gray-400">Loading...</div>;
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-semibold text-white">Snapshots</h2>
+          <button onClick={handleCreate} disabled={creating}
+            className="bg-[#4f46e5] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+            {creating ? "Creating..." : "Create Snapshot"}
+          </button>
+        </div>
+        <p className="text-xs text-gray-500">
+          Snapshots save the current state of your data. Access via API: <code className="text-gray-400">?version=N</code>
+        </p>
+      </div>
+
+      {snapshots.length > 0 ? (
+        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg divide-y divide-[#2a2a4a]">
+          {snapshots.map((s: any) => (
+            <div key={s.id} className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-sm font-bold text-white">v{s.version}</span>
+                <span className="ml-3 text-xs text-gray-400">{s.rowCount} rows, {s.headers.length} columns</span>
+                {s.sheetName && <span className="ml-2 text-xs text-gray-500">({s.sheetName})</span>}
+                <div className="text-xs text-gray-600 mt-0.5">{new Date(s.createdAt).toLocaleString()}</div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleView(s.version)} className="text-[#818cf8] text-xs hover:text-[#a5b4fc] transition-colors">View</button>
+                <button onClick={() => handleDelete(s.version)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-gray-500">No snapshots yet.</p>
+      )}
+
+      {viewData && (
+        <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-white">Snapshot v{viewData.version} Data</h3>
+            <button onClick={() => setViewData(null)} className="text-gray-400 text-xs hover:text-white">Close</button>
+          </div>
+          <pre className="bg-[#0f0f23] border border-[#2a2a4a] rounded-lg p-3 text-xs text-gray-300 font-mono overflow-auto max-h-[400px]">
+            {JSON.stringify(viewData.data, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SyncTab({ apiId }: { apiId: string }) {
+  const [syncEnabled, setSyncEnabled] = useState(false);
+  const [syncCron, setSyncCron] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    api.getSyncSettings(apiId).then((d) => {
+      setSyncEnabled(d.sync.syncEnabled);
+      setSyncCron(d.sync.syncCron || "");
+    }).finally(() => setLoading(false));
+  }, [apiId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg("");
+    try {
+      await api.updateSyncSettings(apiId, {
+        syncEnabled,
+        syncCron: syncCron || null,
+      });
+      setMsg("Sync settings saved!");
+    } catch (err: any) {
+      setMsg(err.message || "Failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTrigger = async () => {
+    try {
+      const result = await api.triggerSync(apiId);
+      setMsg(result.message);
+    } catch (err: any) {
+      setMsg(err.message || "Failed");
+    }
+  };
+
+  if (loading) return <div className="text-gray-400">Loading...</div>;
+
+  return (
+    <div className="space-y-4 max-w-lg">
+      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5 space-y-4">
+        <h2 className="font-semibold text-white">Scheduled Sync</h2>
+        <p className="text-xs text-gray-500">
+          Automatically invalidate cache on a schedule so API responses stay fresh.
+        </p>
+
+        {msg && (
+          <div className={`text-sm rounded-lg p-2 ${msg.includes("saved") || msg.includes("Cache") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
+        )}
+
+        <label className="flex items-center gap-2 text-sm text-gray-300">
+          <input type="checkbox" checked={syncEnabled} onChange={(e) => setSyncEnabled(e.target.checked)} className="rounded bg-[#1e1e3a] border-[#3a3a5a]" />
+          Enable scheduled sync
+        </label>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1.5">Cron Expression</label>
+          <input type="text" value={syncCron} onChange={(e) => setSyncCron(e.target.value)}
+            className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 font-mono focus:outline-none focus:border-[#4f46e5]"
+            placeholder="*/15 * * * *" />
+          <p className="text-xs text-gray-600 mt-1">Examples: <code>*/15 * * * *</code> (every 15 min), <code>0 * * * *</code> (hourly), <code>0 0 * * *</code> (daily)</p>
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={handleSave} disabled={saving}
+            className="bg-[#4f46e5] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+            {saving ? "Saving..." : "Save"}
+          </button>
+          <button onClick={handleTrigger}
+            className="bg-[#2a2a4a] text-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#3a3a5a] transition-colors">
+            Sync Now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SpreadsheetsTab({ apiId }: { apiId: string }) {
+  const [primary, setPrimary] = useState<any>(null);
+  const [additional, setAdditional] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [url, setUrl] = useState("");
+  const [label, setLabel] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const load = () => {
+    api.listSpreadsheets(apiId).then((d) => {
+      setPrimary(d.primary);
+      setAdditional(d.additional);
+    }).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [apiId]);
+
+  const handleAdd = async () => {
+    if (!url || !label) return;
+    setAdding(true);
+    setMsg("");
+    try {
+      await api.addSpreadsheet(apiId, url, label);
+      setUrl("");
+      setLabel("");
+      load();
+      setMsg("Spreadsheet linked!");
+    } catch (err: any) {
+      setMsg(err.message || "Failed");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleRemove = async (sheetId: string) => {
+    await api.removeSpreadsheet(apiId, sheetId);
+    load();
+  };
+
+  if (loading) return <div className="text-gray-400">Loading...</div>;
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg p-5">
+        <h2 className="font-semibold text-white mb-3">Multi-Spreadsheet</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Link additional Google Sheets to this API. Access them via <code className="text-gray-400">?source=&lt;id&gt;</code> query param.
+        </p>
+
+        {msg && (
+          <div className={`text-sm rounded-lg p-2 mb-3 ${msg.includes("linked") ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>{msg}</div>
+        )}
+
+        <div className="space-y-2 mb-3">
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)}
+            className="w-full bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]"
+            placeholder="Label (e.g., Orders 2024)" />
+          <div className="flex gap-2">
+            <input type="text" value={url} onChange={(e) => setUrl(e.target.value)}
+              className="flex-1 bg-[#1e1e3a] border border-[#3a3a5a] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-[#4f46e5]"
+              placeholder="Google Sheets URL or ID" />
+            <button onClick={handleAdd} disabled={adding}
+              className="bg-[#4f46e5] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#4338ca] disabled:opacity-50 transition-colors">
+              Link
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-[#16213e] border border-[#2a2a4a] rounded-lg divide-y divide-[#2a2a4a]">
+        {/* Primary sheet */}
+        {primary && (
+          <div className="p-4 flex items-center justify-between">
+            <div>
+              <span className="text-sm font-medium text-white">{primary.label}</span>
+              <span className="ml-2 text-xs bg-[#4f46e5]/20 text-[#818cf8] px-2 py-0.5 rounded">Primary</span>
+              <div className="text-xs text-gray-500 font-mono mt-0.5">{primary.spreadsheetId}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Additional sheets */}
+        {additional.map((s: any) => (
+          <div key={s.id} className="p-4 flex items-center justify-between">
+            <div>
+              <span className="text-sm font-medium text-white">{s.label}</span>
+              <div className="text-xs text-gray-500 font-mono mt-0.5">
+                ID: <code className="text-gray-400">{s.id}</code>
+              </div>
+            </div>
+            <button onClick={() => handleRemove(s.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">Unlink</button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -63,6 +63,13 @@ model SheetApi {
   // Cache
   cacheTtlSeconds Int @default(60)
 
+  // Scheduled Sync
+  syncEnabled  Boolean @default(false)
+  syncCron     String? // cron expression, e.g. "*/15 * * * *"
+
+  // Auto-snapshot
+  autoSnapshotOnWrite Boolean @default(false)
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -70,6 +77,9 @@ model SheetApi {
   usageLogs            UsageLog[]
   webhookSubscriptions WebhookSubscription[]
   auditLogs            AuditLog[]
+  computedFields       ComputedField[]
+  snapshots            Snapshot[]
+  additionalSheets     AdditionalSheet[]
 }
 
 model ApiKey {
@@ -141,4 +151,41 @@ model WebhookDelivery {
   createdAt      DateTime @default(now())
 
   @@index([subscriptionId, createdAt])
+}
+
+model ComputedField {
+  id         String   @id @default(cuid())
+  sheetApiId String
+  sheetApi   SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
+  name       String   // virtual field name
+  expression String   // e.g. "{{firstName}} {{lastName}}" or "{{price}} * {{quantity}}"
+  createdAt  DateTime @default(now())
+
+  @@unique([sheetApiId, name])
+}
+
+model Snapshot {
+  id         String   @id @default(cuid())
+  sheetApiId String
+  sheetApi   SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
+  version    Int
+  data       Json     // full sheet data at snapshot time
+  headers    String[] // column names at snapshot time
+  rowCount   Int
+  sheetName  String?
+  createdAt  DateTime @default(now())
+
+  @@unique([sheetApiId, version])
+  @@index([sheetApiId, createdAt])
+}
+
+model AdditionalSheet {
+  id            String   @id @default(cuid())
+  sheetApiId    String
+  sheetApi      SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
+  spreadsheetId String
+  label         String   // friendly name for this additional spreadsheet
+  createdAt     DateTime @default(now())
+
+  @@unique([sheetApiId, spreadsheetId])
 }

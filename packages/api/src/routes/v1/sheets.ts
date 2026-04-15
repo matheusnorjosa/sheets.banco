@@ -11,6 +11,7 @@ import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
 import { apiRateLimitOptions } from '../../middleware/rate-limiter.js';
 import { hmacVerify } from '../../middleware/hmac-verify.js';
 import { enqueueWrite } from '../../queues/sheets-write.queue.js';
+import { applyComputedFields } from '../../utils/computed-fields.js';
 
 const createBodySchema = z.object({
   data: z.union([
@@ -24,6 +25,7 @@ const updateBodySchema = z.object({
 });
 
 interface SheetApiRecord {
+  id: string;
   spreadsheetId: string;
   userId: string | null;
   cacheTtlSeconds: number;
@@ -31,6 +33,7 @@ interface SheetApiRecord {
   allowCreate: boolean;
   allowUpdate: boolean;
   allowDelete: boolean;
+  autoSnapshotOnWrite: boolean;
 }
 
 function getSheetApi(request: any): SheetApiRecord {
@@ -47,6 +50,27 @@ function getUserId(request: any): string {
 
 function getQueryParams(request: any) {
   return (request.query ?? {}) as Record<string, string>;
+}
+
+async function getComputedFieldsForApi(sheetApiId: string) {
+  return prisma.computedField.findMany({
+    where: { sheetApiId },
+    select: { name: true, expression: true },
+  });
+}
+
+/**
+ * Resolve which spreadsheetId to use.
+ * If ?source=<additionalSheetId> is provided, use that additional spreadsheet.
+ */
+async function resolveSpreadsheetId(sheetApi: SheetApiRecord & { id?: string }, query: Record<string, string>): Promise<string> {
+  if (query.source) {
+    const additional = await prisma.additionalSheet.findFirst({
+      where: { id: query.source, sheetApiId: (sheetApi as any).id },
+    });
+    if (additional) return additional.spreadsheetId;
+  }
+  return sheetApi.spreadsheetId;
 }
 
 export async function sheetsRoutes(app: FastifyInstance) {
@@ -78,13 +102,50 @@ export async function sheetsRoutes(app: FastifyInstance) {
   app.addHook('onRequest', hmacVerify);
 
   // GET /:apiId — return all rows (with pagination)
+  // Supports ?version=N to return snapshot data
+  // Supports ?source=<additionalSheetId> for multi-spreadsheet
+  // Supports ?include_computed=false to exclude computed fields
   app.get('/:apiId', async (request) => {
     const sheetApi = getSheetApi(request);
     const userId = getUserId(request);
     const query = getQueryParams(request);
     const sheetName = query.sheet;
 
-    let rows = await sheetsService.getRows(userId, sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+    // Snapshot version support
+    if (query.version) {
+      const snapshot = await prisma.snapshot.findUnique({
+        where: {
+          sheetApiId_version: {
+            sheetApiId: sheetApi.id,
+            version: Number(query.version),
+          },
+        },
+      });
+      if (!snapshot) throw new NotFoundError(`Snapshot version ${query.version} not found.`);
+      let rows = snapshot.data as sheetsService.SheetRow[];
+
+      rows = applyPagination(rows, {
+        limit: query.limit ? Number(query.limit) : undefined,
+        offset: query.offset ? Number(query.offset) : undefined,
+        sort_by: query.sort_by,
+        sort_order: query.sort_order as 'asc' | 'desc' | 'random' | undefined,
+        cast_numbers: query.cast_numbers === 'true',
+      });
+
+      if (query.cast_numbers === 'true') return castNumbers(rows);
+      if (query.single_object === 'true' && rows.length > 0) return rows[0];
+      return rows;
+    }
+
+    // Multi-spreadsheet support
+    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    let rows = await sheetsService.getRows(userId, spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+
+    // Apply computed fields (default: true)
+    if (query.include_computed !== 'false') {
+      const computedFields = await getComputedFieldsForApi(sheetApi.id);
+      rows = applyComputedFields(rows, computedFields);
+    }
 
     rows = applyPagination(rows, {
       limit: query.limit ? Number(query.limit) : undefined,
@@ -124,10 +185,16 @@ export async function sheetsRoutes(app: FastifyInstance) {
     const sheetName = query.sheet;
     const caseSensitive = query.casesensitive === 'true';
 
-    let rows = await sheetsService.getRows(userId, sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    let rows = await sheetsService.getRows(userId, spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
 
     const filters = buildFilters(query, caseSensitive);
     rows = filterAnd(rows, filters);
+
+    if (query.include_computed !== 'false') {
+      const computedFields = await getComputedFieldsForApi(sheetApi.id);
+      rows = applyComputedFields(rows, computedFields);
+    }
 
     rows = applyPagination(rows, {
       limit: query.limit ? Number(query.limit) : undefined,
@@ -150,10 +217,16 @@ export async function sheetsRoutes(app: FastifyInstance) {
     const sheetName = query.sheet;
     const caseSensitive = query.casesensitive === 'true';
 
-    let rows = await sheetsService.getRows(userId, sheetApi.spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    let rows = await sheetsService.getRows(userId, spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
 
     const filters = buildFilters(query, caseSensitive);
     rows = filterOr(rows, filters);
+
+    if (query.include_computed !== 'false') {
+      const computedFields = await getComputedFieldsForApi(sheetApi.id);
+      rows = applyComputedFields(rows, computedFields);
+    }
 
     rows = applyPagination(rows, {
       limit: query.limit ? Number(query.limit) : undefined,

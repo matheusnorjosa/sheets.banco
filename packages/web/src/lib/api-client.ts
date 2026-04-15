@@ -129,6 +129,97 @@ class ApiClient {
       total: number;
     }>(`/dashboard/apis/${apiId}/usage/chart?days=${days}`);
   }
+
+  // Computed Fields
+  async listComputedFields(apiId: string) {
+    return this.fetch<{ fields: any[] }>(`/dashboard/apis/${apiId}/computed-fields`);
+  }
+
+  async createComputedField(apiId: string, name: string, expression: string) {
+    return this.fetch<{ field: any }>(`/dashboard/apis/${apiId}/computed-fields`, {
+      method: "POST",
+      body: JSON.stringify({ name, expression }),
+    });
+  }
+
+  async updateComputedField(apiId: string, fieldId: string, expression: string) {
+    return this.fetch<{ field: any }>(
+      `/dashboard/apis/${apiId}/computed-fields/${fieldId}`,
+      { method: "PATCH", body: JSON.stringify({ expression }) }
+    );
+  }
+
+  async deleteComputedField(apiId: string, fieldId: string) {
+    return this.fetch<{ deleted: boolean }>(
+      `/dashboard/apis/${apiId}/computed-fields/${fieldId}`,
+      { method: "DELETE" }
+    );
+  }
+
+  // Snapshots
+  async listSnapshots(apiId: string) {
+    return this.fetch<{ snapshots: any[] }>(`/dashboard/apis/${apiId}/snapshots`);
+  }
+
+  async createSnapshot(apiId: string, sheet?: string) {
+    const qs = sheet ? `?sheet=${encodeURIComponent(sheet)}` : "";
+    return this.fetch<{ snapshot: any }>(`/dashboard/apis/${apiId}/snapshots${qs}`, {
+      method: "POST",
+    });
+  }
+
+  async getSnapshot(apiId: string, version: number) {
+    return this.fetch<{ snapshot: any }>(
+      `/dashboard/apis/${apiId}/snapshots/${version}`
+    );
+  }
+
+  async deleteSnapshot(apiId: string, version: number) {
+    return this.fetch<{ deleted: boolean }>(
+      `/dashboard/apis/${apiId}/snapshots/${version}`,
+      { method: "DELETE" }
+    );
+  }
+
+  // Scheduled Sync
+  async getSyncSettings(apiId: string) {
+    return this.fetch<{ sync: any }>(`/dashboard/apis/${apiId}/sync`);
+  }
+
+  async updateSyncSettings(apiId: string, data: { syncEnabled: boolean; syncCron?: string | null }) {
+    return this.fetch<{ sync: any }>(`/dashboard/apis/${apiId}/sync`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async triggerSync(apiId: string) {
+    return this.fetch<{ triggered: boolean; message: string }>(
+      `/dashboard/apis/${apiId}/sync/trigger`,
+      { method: "POST" }
+    );
+  }
+
+  // Multi-spreadsheet
+  async listSpreadsheets(apiId: string) {
+    return this.fetch<{ primary: any; additional: any[] }>(
+      `/dashboard/apis/${apiId}/spreadsheets`
+    );
+  }
+
+  async addSpreadsheet(apiId: string, spreadsheetUrl: string, label: string) {
+    return this.fetch<{ sheet: any }>(`/dashboard/apis/${apiId}/spreadsheets`, {
+      method: "POST",
+      body: JSON.stringify({ spreadsheetUrl, label }),
+    });
+  }
+
+  async removeSpreadsheet(apiId: string, sheetId: string) {
+    return this.fetch<{ deleted: boolean }>(
+      `/dashboard/apis/${apiId}/spreadsheets/${sheetId}`,
+      { method: "DELETE" }
+    );
+  }
 }
 
 export const api = new ApiClient();
