@@ -457,6 +457,12 @@ function PlaygroundTab({ endpoint }: { endpoint: string }) {
   const [response, setResponse] = useState<{ status: number; body: string; time: number } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const handleExport = (format: "json" | "csv", pretty?: boolean) => {
+    let url = `${endpoint}/export?format=${format}`;
+    if (format === "json" && pretty) url += "&pretty=true";
+    window.open(url, "_blank");
+  };
+
   const handleSend = async () => {
     setLoading(true);
     setResponse(null);
@@ -552,6 +558,26 @@ function PlaygroundTab({ endpoint }: { endpoint: string }) {
           </pre>
         </div>
       )}
+
+      {/* Export */}
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
+        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Exportar Dados</h2>
+        <p className="text-xs text-[var(--text-muted)] mb-3">Baixe todos os dados da planilha em diferentes formatos.</p>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => handleExport("json", true)}
+            className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors">
+            JSON Formatado
+          </button>
+          <button onClick={() => handleExport("json")}
+            className="bg-[var(--card-border)] text-[var(--text-secondary)] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--input-border)] transition-colors">
+            JSON Compacto
+          </button>
+          <button onClick={() => handleExport("csv")}
+            className="bg-[var(--card-border)] text-[var(--text-secondary)] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--input-border)] transition-colors">
+            CSV
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

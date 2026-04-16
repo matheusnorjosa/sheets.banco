@@ -78,6 +78,11 @@ export async function importExportRoutes(app: FastifyInstance) {
     // JSON download
     reply.header('Content-Type', 'application/json');
     reply.header('Content-Disposition', `attachment; filename="${sheetApi.slug || sheetApi.id}.json"`);
+
+    if (query.pretty === 'true') {
+      return reply.send(JSON.stringify(rows, null, 2));
+    }
+
     return rows;
   });
 
