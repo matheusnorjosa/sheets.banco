@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import { prisma } from '../../lib/prisma.js';
-import { NotFoundError, ValidationError } from '../../lib/errors.js';
+import { NotFoundError, ValidationError, AppError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 
@@ -149,7 +149,42 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     const existing = await prisma.sheetApi.findFirst({ where: { id, userId } });
     if (!existing) throw new NotFoundError('API not found.');
 
-    await prisma.sheetApi.delete({ where: { id } });
+    // Explicit cleanup in transaction — doesn't rely on FK cascade
+    // (production DB may have been created before all relations had ON DELETE CASCADE)
+    try {
+      await prisma.$transaction(async (tx) => {
+        const subs = await tx.webhookSubscription.findMany({
+          where: { sheetApiId: id },
+          select: { id: true },
+        });
+        if (subs.length > 0) {
+          await tx.webhookDelivery.deleteMany({
+            where: { subscriptionId: { in: subs.map((s) => s.id) } },
+          });
+        }
+
+        await tx.webhookSubscription.deleteMany({ where: { sheetApiId: id } });
+        await tx.apiKey.deleteMany({ where: { sheetApiId: id } });
+        await tx.usageLog.deleteMany({ where: { sheetApiId: id } });
+        await tx.computedField.deleteMany({ where: { sheetApiId: id } });
+        await tx.snapshot.deleteMany({ where: { sheetApiId: id } });
+        await tx.additionalSheet.deleteMany({ where: { sheetApiId: id } });
+        await tx.auditLog.updateMany({
+          where: { sheetApiId: id },
+          data: { sheetApiId: null },
+        });
+
+        await tx.sheetApi.delete({ where: { id } });
+      });
+    } catch (err: any) {
+      app.log.error({ err, sheetApiId: id }, 'Failed to delete SheetApi');
+      throw new AppError(
+        500,
+        'DELETE_FAILED',
+        `Failed to delete API: ${err?.message || 'unknown error'}`,
+      );
+    }
+
     return { deleted: true };
   });
 
