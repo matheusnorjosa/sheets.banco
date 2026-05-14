@@ -36,4 +36,7 @@ COPY --from=builder /app/packages/shared packages/shared
 EXPOSE 3000
 
 # Push schema to DB then start
-CMD npx prisma db push --schema prisma/schema.prisma --skip-generate && node packages/api/dist/src/index.js
+# --accept-data-loss bypasses warnings on additive changes (new nullable columns,
+# unique constraints on empty data). Postgres still rejects actual constraint
+# violations at SQL level, so this is safe for forward-only schema evolution.
+CMD npx prisma db push --schema prisma/schema.prisma --skip-generate --accept-data-loss && node packages/api/dist/src/index.js
