@@ -87,6 +87,103 @@ export async function getRows(
 export async function invalidateCache(spreadsheetId: string): Promise<void> {
   await cache.invalidate(`rows:${spreadsheetId}`);
   await cache.invalidate(`cols:${spreadsheetId}`);
+  await cache.invalidate(`raw:${spreadsheetId}`);
+  await cache.invalidate(`allRaw:${spreadsheetId}`);
+  await cache.invalidate(`sheetList:${spreadsheetId}`);
+}
+
+/**
+ * List all tab names in the spreadsheet.
+ */
+export async function listSheetNames(
+  userId: string,
+  spreadsheetId: string,
+  cacheTtl = 300,
+): Promise<string[]> {
+  const cacheKey = `sheetList:${spreadsheetId}`;
+  const cached = await cache.get<string[]>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const sheets = await getSheetsClient(userId);
+    const response = await sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties.title',
+    });
+    const names = (response.data.sheets ?? [])
+      .map((s) => s.properties?.title)
+      .filter((n): n is string => typeof n === 'string');
+    await cache.set(cacheKey, names, cacheTtl);
+    return names;
+  } catch (error) {
+    return handleSheetError(error);
+  }
+}
+
+/**
+ * Get raw 2D values from a single sheet (optionally restricted to a range).
+ */
+export async function getRawValues(
+  userId: string,
+  spreadsheetId: string,
+  sheetName?: string,
+  range?: string,
+  cacheTtl = 60,
+): Promise<string[][]> {
+  const cacheKey = `raw:${spreadsheetId}:${sheetName ?? '_default'}:${range ?? '_full'}`;
+  const cached = await cache.get<string[][]>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
+    const sheets = await getSheetsClient(userId);
+    const fullRange = range ? `'${tab}'!${range}` : `'${tab}'`;
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: fullRange,
+    });
+
+    const values = (response.data.values as string[][]) ?? [];
+    await cache.set(cacheKey, values, cacheTtl);
+    return values;
+  } catch (error) {
+    return handleSheetError(error);
+  }
+}
+
+/**
+ * Fetch raw 2D values for ALL tabs in one batch request.
+ */
+export async function getAllSheetsRaw(
+  userId: string,
+  spreadsheetId: string,
+  cacheTtl = 60,
+): Promise<Record<string, string[][]>> {
+  const cacheKey = `allRaw:${spreadsheetId}`;
+  const cached = await cache.get<Record<string, string[][]>>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const names = await listSheetNames(userId, spreadsheetId, cacheTtl);
+    if (names.length === 0) return {};
+
+    const sheets = await getSheetsClient(userId);
+    const response = await sheets.spreadsheets.values.batchGet({
+      spreadsheetId,
+      ranges: names.map((n) => `'${n}'`),
+    });
+
+    const result: Record<string, string[][]> = {};
+    const valueRanges = response.data.valueRanges ?? [];
+    for (let i = 0; i < names.length; i++) {
+      result[names[i]] = (valueRanges[i]?.values as string[][]) ?? [];
+    }
+
+    await cache.set(cacheKey, result, cacheTtl);
+    return result;
+  } catch (error) {
+    return handleSheetError(error);
+  }
 }
 
 export async function getColumnNames(

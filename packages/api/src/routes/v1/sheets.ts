@@ -5,6 +5,7 @@ import { NotFoundError, ValidationError, AppError } from '../../lib/errors.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 import { buildFilters, filterAnd, filterOr } from '../../utils/query-parser.js';
 import { applyPagination, castNumbers } from '../../utils/pagination.js';
+import { applyLayout, isLayout, sanitizeRange, type Layout } from '../../utils/layout.js';
 import { apiAuth } from '../../middleware/api-auth.js';
 import { apiCors } from '../../middleware/cors.js';
 import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
@@ -139,7 +140,44 @@ export async function sheetsRoutes(app: FastifyInstance) {
 
     // Multi-spreadsheet support
     const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
-    let rows = await sheetsService.getRows(userId, spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+
+    // Layout & range params
+    const layout: Layout = isLayout(query.layout) ? query.layout : 'table';
+    let range: string | undefined;
+    try {
+      range = sanitizeRange(query.range);
+    } catch (err) {
+      throw new ValidationError((err as Error).message);
+    }
+
+    // ?all_sheets=true — return data from every tab keyed by tab name
+    if (query.all_sheets === 'true') {
+      const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
+      const result: Record<string, unknown> = {};
+      for (const [tabName, values] of Object.entries(allRaw)) {
+        result[tabName] = applyLayout(values, layout);
+      }
+      return result;
+    }
+
+    // Non-table layouts: skip filters/computed/pagination (they don't apply)
+    if (layout === 'raw' || layout === 'matrix') {
+      const values = await sheetsService.getRawValues(
+        userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
+      );
+      return applyLayout(values, layout);
+    }
+
+    // Default: table layout (current behavior)
+    let rows: sheetsService.SheetRow[];
+    if (range) {
+      const values = await sheetsService.getRawValues(
+        userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
+      );
+      rows = applyLayout(values, 'table') as sheetsService.SheetRow[];
+    } else {
+      rows = await sheetsService.getRows(userId, spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+    }
 
     // Apply computed fields (default: true)
     if (query.include_computed !== 'false') {
@@ -158,6 +196,16 @@ export async function sheetsRoutes(app: FastifyInstance) {
     if (query.cast_numbers === 'true') return castNumbers(rows);
     if (query.single_object === 'true' && rows.length > 0) return rows[0];
     return rows;
+  });
+
+  // GET /:apiId/sheets — list all tab names
+  app.get('/:apiId/sheets', async (request) => {
+    const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
+    const query = getQueryParams(request);
+    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    const names = await sheetsService.listSheetNames(userId, spreadsheetId);
+    return { sheets: names };
   });
 
   // GET /:apiId/keys — return column names

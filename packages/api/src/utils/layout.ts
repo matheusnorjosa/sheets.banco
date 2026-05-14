@@ -1,0 +1,60 @@
+import type { SheetRow } from '../services/google-sheets.service.js';
+
+export type Layout = 'table' | 'raw' | 'matrix';
+
+export function isLayout(value: string | undefined): value is Layout {
+  return value === 'table' || value === 'raw' || value === 'matrix';
+}
+
+export function applyLayout(
+  values: string[][],
+  layout: Layout,
+): SheetRow[] | string[][] | Record<string, Record<string, string>> {
+  if (layout === 'raw') return values;
+  if (layout === 'matrix') return toMatrix(values);
+  return toTable(values);
+}
+
+function toTable(values: string[][]): SheetRow[] {
+  if (!values || values.length < 2) return [];
+  const headers = (values[0] ?? []).map((h) => String(h ?? ''));
+  return values.slice(1).map((row) => {
+    const obj: SheetRow = {};
+    for (let i = 0; i < headers.length; i++) {
+      obj[headers[i]] = String(row[i] ?? '');
+    }
+    return obj;
+  });
+}
+
+function toMatrix(values: string[][]): Record<string, Record<string, string>> {
+  if (!values || values.length < 2) return {};
+  const headerRow = values[0] ?? [];
+  const colKeys = headerRow.slice(1).map((c) => String(c ?? ''));
+  const result: Record<string, Record<string, string>> = {};
+
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r] ?? [];
+    const rowKey = String(row[0] ?? '');
+    if (!rowKey) continue;
+    const rowObj: Record<string, string> = {};
+    for (let c = 0; c < colKeys.length; c++) {
+      rowObj[colKeys[c]] = String(row[c + 1] ?? '');
+    }
+    result[rowKey] = rowObj;
+  }
+
+  return result;
+}
+
+/**
+ * Validate A1-notation range. Allows refs like "A1:Z100", "A:A", "1:5", "A1".
+ * Throws if invalid.
+ */
+export function sanitizeRange(input: string | undefined): string | undefined {
+  if (!input) return undefined;
+  if (!/^[A-Z]+\d*(?::[A-Z]*\d*)?$|^\d+:\d+$/.test(input)) {
+    throw new Error('Invalid range. Use A1 notation (e.g., "A1:Z100", "A:A", "1:5").');
+  }
+  return input;
+}

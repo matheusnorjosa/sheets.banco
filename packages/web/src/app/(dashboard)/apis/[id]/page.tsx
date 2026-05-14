@@ -158,6 +158,10 @@ function OverviewTab({ endpoint, sheetApi }: { endpoint: string; sheetApi: any }
         <div className="text-sm space-y-2">
           {[
             { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}`, desc: "Todas as linhas" },
+            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}?all_sheets=true`, desc: "Todas as abas (objeto)" },
+            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}?layout=matrix`, desc: "Layout matriz (calendários)" },
+            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}?layout=raw&range=A1:Z100`, desc: "Valores crus (2D)" },
+            { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/sheets`, desc: "Listar nomes das abas" },
             { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/search?col=val`, desc: "Buscar" },
             { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/keys`, desc: "Nomes das colunas" },
             { method: "GET", color: "text-green-400 bg-green-900/30", path: `/${sheetApi.id}/count`, desc: "Contagem de linhas" },
