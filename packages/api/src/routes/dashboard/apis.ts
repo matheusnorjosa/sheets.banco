@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError, AppError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
@@ -152,7 +153,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     // Explicit cleanup in transaction — doesn't rely on FK cascade
     // (production DB may have been created before all relations had ON DELETE CASCADE)
     try {
-      await prisma.$transaction(async (tx: typeof prisma) => {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const subs = await tx.webhookSubscription.findMany({
           where: { sheetApiId: id },
           select: { id: true },
