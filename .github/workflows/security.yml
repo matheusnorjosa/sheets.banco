@@ -1,0 +1,55 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Monday at 09:13 UTC — catches newly disclosed CVEs without
+    # syncing to a busy crontab minute.
+    - cron: '13 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  npm-audit:
+    name: npm audit (high+ fails)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # --audit-level=high fails on high+critical; moderate is still surfaced
+      # in the job summary but doesn't block.
+      - name: Run npm audit
+        run: |
+          npm audit --omit=dev --audit-level=high || EXIT=$?
+          echo "exit_code=${EXIT:-0}" >> $GITHUB_STEP_SUMMARY
+          npm audit --omit=dev || true
+          exit ${EXIT:-0}
+
+  secret-scan:
+    name: Secret scan (trufflehog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so trufflehog can diff against the base branch on PRs
+          # and scan all commits on push.
+          fetch-depth: 0
+
+      - name: Scan for committed secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.before || github.event.repository.default_branch }}
+          head: ${{ github.event.after || 'HEAD' }}
+          # --only-verified: only fail on secrets that trufflehog could actually
+          # authenticate against the upstream service. Cuts most false positives.
+          extra_args: --only-verified
