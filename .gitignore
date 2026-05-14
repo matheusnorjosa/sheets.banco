@@ -15,6 +15,7 @@ credentials.json
 *service-account*.json
 organizador-agenda-*.json
 client_secret_*.json
+aprender.json
 
 # Deploy configs (contain infra details)
 docker-compose.yml

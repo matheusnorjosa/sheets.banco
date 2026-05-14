@@ -160,14 +160,21 @@ const start = async () => {
     // Initialize Redis-backed cache after plugin is registered
     initCache(app.redis);
 
-    // Initialize BullMQ queue and worker
-    initSheetsWriteQueue(env.REDIS_URL);
-    initSheetsWriteWorker(env.REDIS_URL);
-    initWebhookDeliveryQueue(env.REDIS_URL);
-    initWebhookDeliveryWorker(env.REDIS_URL);
-    initScheduledSyncQueue(env.REDIS_URL);
-    initScheduledSyncWorker(env.REDIS_URL);
-    app.log.info('BullMQ queues and workers started');
+    // BullMQ requires a real Redis instance. Skip when running without one
+    // (REDIS_URL not set in env) — write/sync features become unavailable but
+    // reads stay fast instead of burning seconds per request on retries.
+    const hasRedis = !!app.redis;
+    if (hasRedis) {
+      initSheetsWriteQueue(env.REDIS_URL);
+      initSheetsWriteWorker(env.REDIS_URL);
+      initWebhookDeliveryQueue(env.REDIS_URL);
+      initWebhookDeliveryWorker(env.REDIS_URL);
+      initScheduledSyncQueue(env.REDIS_URL);
+      initScheduledSyncWorker(env.REDIS_URL);
+      app.log.info('BullMQ queues and workers started');
+    } else {
+      app.log.warn('Skipping BullMQ initialization — Redis not configured (writes/webhooks/scheduled-sync disabled)');
+    }
 
     // Restore scheduled sync jobs from database
     const { prisma } = await import('./lib/prisma.js');

@@ -10,11 +10,15 @@ export function initCache(redisInstance: any): void {
   redis = redisInstance;
 }
 
+function isReady(): boolean {
+  return !!redis && redis.status === 'ready';
+}
+
 export async function get<T>(key: string): Promise<T | undefined> {
-  if (!redis) return undefined;
+  if (!isReady()) return undefined;
 
   try {
-    const data = await redis.get(key);
+    const data = await redis!.get(key);
     if (!data) return undefined;
     return JSON.parse(data) as T;
   } catch {
@@ -23,20 +27,20 @@ export async function get<T>(key: string): Promise<T | undefined> {
 }
 
 export async function set<T>(key: string, data: T, ttlSeconds: number): Promise<void> {
-  if (!redis) return;
+  if (!isReady()) return;
 
   try {
-    await redis.setex(key, ttlSeconds, JSON.stringify(data));
+    await redis!.setex(key, ttlSeconds, JSON.stringify(data));
   } catch {
     // Silently fail — cache is best-effort
   }
 }
 
 export async function invalidate(prefix: string): Promise<void> {
-  if (!redis) return;
+  if (!isReady()) return;
 
   try {
-    const stream = redis.scanStream({ match: `${prefix}*`, count: 100 });
+    const stream = redis!.scanStream({ match: `${prefix}*`, count: 100 });
     const keys: string[] = [];
 
     for await (const batch of stream) {
@@ -44,7 +48,7 @@ export async function invalidate(prefix: string): Promise<void> {
     }
 
     if (keys.length > 0) {
-      await redis.del(...keys);
+      await redis!.del(...keys);
     }
   } catch {
     // Silently fail
