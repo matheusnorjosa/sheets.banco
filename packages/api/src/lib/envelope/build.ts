@@ -2,9 +2,15 @@ import { detectType, type SheetType } from '../detect/index.js';
 import { normalizeUserRow } from '../normalize/types/users.js';
 import { normalizeProdutoRow } from '../normalize/types/produtos.js';
 import { normalizeAgendaRow } from '../normalize/types/agenda.js';
+import { normalizeEventoRow } from '../normalize/types/eventos.js';
+import { normalizeBloqueioRow } from '../normalize/types/bloqueios.js';
+import { normalizeDeslocamentoRow } from '../normalize/types/deslocamento.js';
+import { normalizeDisponibilidadeMensalRow } from '../normalize/types/disponibilidadeMensal.js';
+import { normalizeDisponibilidadeAnualRow } from '../normalize/types/disponibilidadeAnual.js';
 import { rowHash, importHash } from '../hash/index.js';
 import type { RawRow } from '../normalize/row.js';
 import type { ValidationResult, ValidationStatus } from '../validate/types.js';
+import { extractPeriodFromSheetName } from './period.js';
 
 export const SCHEMA_VERSION = '1.0';
 
@@ -86,7 +92,12 @@ interface NormalizedOutput {
   validation: ValidationResult;
 }
 
-function normalizeRowByType(type: SheetType, row: RawRow): NormalizedOutput {
+interface SheetContext {
+  mes: number | null;
+  ano: number | null;
+}
+
+function normalizeRowByType(type: SheetType, row: RawRow, ctx: SheetContext): NormalizedOutput {
   switch (type) {
     case 'users': {
       const r = normalizeUserRow(row);
@@ -98,6 +109,26 @@ function normalizeRowByType(type: SheetType, row: RawRow): NormalizedOutput {
     }
     case 'agenda': {
       const r = normalizeAgendaRow(row);
+      return { normalized: r.normalized as unknown as Record<string, unknown>, validation: r.validation };
+    }
+    case 'eventos': {
+      const r = normalizeEventoRow(row);
+      return { normalized: r.normalized as unknown as Record<string, unknown>, validation: r.validation };
+    }
+    case 'bloqueios': {
+      const r = normalizeBloqueioRow(row);
+      return { normalized: r.normalized as unknown as Record<string, unknown>, validation: r.validation };
+    }
+    case 'deslocamento': {
+      const r = normalizeDeslocamentoRow(row);
+      return { normalized: r.normalized as unknown as Record<string, unknown>, validation: r.validation };
+    }
+    case 'disponibilidade_mensal': {
+      const r = normalizeDisponibilidadeMensalRow(row, { mes: ctx.mes, ano: ctx.ano });
+      return { normalized: r.normalized as unknown as Record<string, unknown>, validation: r.validation };
+    }
+    case 'disponibilidade_anual': {
+      const r = normalizeDisponibilidadeAnualRow(row, { ano: ctx.ano });
       return { normalized: r.normalized as unknown as Record<string, unknown>, validation: r.validation };
     }
     case 'unknown':
@@ -118,6 +149,11 @@ function normalizeRowByType(type: SheetType, row: RawRow): NormalizedOutput {
   }
 }
 
+function buildContext(sheetName: string): SheetContext {
+  const { mes, ano } = extractPeriodFromSheetName(sheetName);
+  return { mes, ano };
+}
+
 export function buildEnvelope(params: {
   apiId: string;
   apiName: string;
@@ -129,12 +165,18 @@ export function buildEnvelope(params: {
     users: 0,
     produtos: 0,
     agenda: 0,
+    eventos: 0,
+    bloqueios: 0,
+    deslocamento: 0,
+    disponibilidade_mensal: 0,
+    disponibilidade_anual: 0,
     unknown: 0,
   };
 
   for (const sheet of params.sheets) {
     const columns = sheet.rows[0] ? Object.keys(sheet.rows[0]) : [];
     const type = detectType(columns);
+    const ctx = buildContext(sheet.name);
     sheetsInfo.push({
       name: sheet.name,
       detected_type: type,
@@ -144,9 +186,12 @@ export function buildEnvelope(params: {
 
     for (let i = 0; i < sheet.rows.length; i++) {
       const raw = sheet.rows[i];
-      const { normalized, validation } = normalizeRowByType(type, raw);
+      const { normalized, validation } = normalizeRowByType(type, raw, ctx);
       const rHash = rowHash(raw);
-      const iHash = importHash(type, type === 'unknown' ? null : (normalized as never));
+      const iHash = importHash(type, type === 'unknown' ? null : (normalized as never), {
+        mes: ctx.mes,
+        ano: ctx.ano,
+      });
 
       allRecords.push({
         source: {
@@ -184,7 +229,6 @@ export function buildEnvelope(params: {
     detectedTypeCounts[sheet.detected_type]++;
   }
 
-  // Summary stats
   const summary = {
     total_records: allRecords.length,
     valid_records: 0,

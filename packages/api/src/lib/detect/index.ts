@@ -1,13 +1,24 @@
 import { uppercaseKey } from '../normalize/text.js';
+import { parseMonth } from '../normalize/month.js';
 
-export type SheetType = 'users' | 'produtos' | 'agenda' | 'unknown';
+export type SheetType =
+  | 'users'
+  | 'produtos'
+  | 'agenda'
+  | 'eventos'
+  | 'bloqueios'
+  | 'deslocamento'
+  | 'disponibilidade_mensal'
+  | 'disponibilidade_anual'
+  | 'unknown';
 
 /**
  * Detect the type of a sheet from its column headers.
  * Comparisons are accent- and case-insensitive.
  */
 export function detectType(headers: string[]): SheetType {
-  const keys = new Set(headers.map((h) => uppercaseKey(h)).filter(Boolean));
+  const rawHeaders = headers.map((h) => String(h ?? ''));
+  const keys = new Set(rawHeaders.map(uppercaseKey).filter(Boolean));
 
   if (hasAll(keys, ['CPF', 'CARGO', 'EMAIL'])) return 'users';
 
@@ -18,6 +29,7 @@ export function detectType(headers: string[]): SheetType {
     return 'produtos';
   }
 
+  // Original spec "agenda" — Coordenador-based events
   if (
     (keys.has('MUNICIPIOS') || keys.has('MUNICIPIO')) &&
     keys.has('DATA') &&
@@ -27,6 +39,49 @@ export function detectType(headers: string[]): SheetType {
     keys.has('COORDENADOR')
   ) {
     return 'agenda';
+  }
+
+  // "eventos" — real-world events sheet (no Coordenador, convidado1..7 instead)
+  if (
+    keys.has('TITULO') &&
+    keys.has('MUNICIPIO') &&
+    keys.has('DATA') &&
+    keys.has('INICIO') &&
+    keys.has('FIM') &&
+    keys.has('PROJETO')
+  ) {
+    return 'eventos';
+  }
+
+  // "bloqueios" — Usuário, Início, Fim, Tipo
+  if (
+    (keys.has('USUARIO') || keys.has('USUÁRIO')) &&
+    (keys.has('INICIO') || keys.has('INÍCIO')) &&
+    keys.has('FIM') &&
+    keys.has('TIPO')
+  ) {
+    return 'bloqueios';
+  }
+
+  // "deslocamento" — has Pessoa N columns
+  const pessoaCount = rawHeaders.filter((h) => /^pessoa\s*\d+$/i.test(h.trim())).length;
+  if (pessoaCount >= 2) {
+    return 'deslocamento';
+  }
+
+  // "disponibilidade_anual" — 10+ Portuguese month-name columns
+  const monthCount = rawHeaders.filter((h) => parseMonth(h) !== null).length;
+  if (monthCount >= 10) {
+    return 'disponibilidade_anual';
+  }
+
+  // "disponibilidade_mensal" — at least 25 columns that are day numbers 1-31
+  const dayCount = rawHeaders.filter((h) => {
+    const n = Number(String(h).trim());
+    return Number.isInteger(n) && n >= 1 && n <= 31;
+  }).length;
+  if (dayCount >= 25) {
+    return 'disponibilidade_mensal';
   }
 
   return 'unknown';
