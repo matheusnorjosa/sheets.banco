@@ -1,0 +1,34 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    groups:
+      # Group minor + patch bumps to avoid PR noise
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Sao_Paulo
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: chore(actions)
