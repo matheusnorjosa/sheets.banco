@@ -6,6 +6,7 @@ import * as sheetsService from '../../services/google-sheets.service.js';
 import { buildFilters, filterAnd, filterOr } from '../../utils/query-parser.js';
 import { applyPagination, castNumbers } from '../../utils/pagination.js';
 import { applyLayout, isLayout, sanitizeRange, type Layout } from '../../utils/layout.js';
+import { buildEnvelope, rowsFromValues } from '../../lib/envelope/build.js';
 import { apiAuth } from '../../middleware/api-auth.js';
 import { apiCors } from '../../middleware/cors.js';
 import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
@@ -148,6 +149,31 @@ export async function sheetsRoutes(app: FastifyInstance) {
       range = sanitizeRange(query.range);
     } catch (err) {
       throw new ValidationError((err as Error).message);
+    }
+
+    // ?envelope=v1 — structured envelope with normalization, validation, hashes.
+    // Opt-in only; default response stays a flat array for backward compatibility.
+    if (query.envelope === 'v1') {
+      const apiName = (sheetApi as any).name || sheetApi.id;
+      if (sheetName) {
+        const values = await sheetsService.getRawValues(
+          userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
+        );
+        return buildEnvelope({
+          apiId: sheetApi.id,
+          apiName,
+          sheets: [{ name: sheetName, rows: rowsFromValues(values) }],
+        });
+      }
+      const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
+      return buildEnvelope({
+        apiId: sheetApi.id,
+        apiName,
+        sheets: Object.entries(allRaw).map(([name, values]) => ({
+          name,
+          rows: rowsFromValues(values),
+        })),
+      });
     }
 
     // ?all_sheets=true — return data from every tab keyed by tab name

@@ -152,14 +152,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     // Explicit cleanup in transaction — doesn't rely on FK cascade
     // (production DB may have been created before all relations had ON DELETE CASCADE)
     try {
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: typeof prisma) => {
         const subs = await tx.webhookSubscription.findMany({
           where: { sheetApiId: id },
           select: { id: true },
         });
         if (subs.length > 0) {
           await tx.webhookDelivery.deleteMany({
-            where: { subscriptionId: { in: subs.map((s) => s.id) } },
+            where: { subscriptionId: { in: subs.map((s: { id: string }) => s.id) } },
           });
         }
 
