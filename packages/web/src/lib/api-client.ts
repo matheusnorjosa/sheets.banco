@@ -21,9 +21,12 @@ class ApiClient {
   async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = this.getToken();
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
       ...(options.headers as Record<string, string>),
     };
+
+    if (options.body !== undefined && options.body !== null) {
+      headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
+    }
 
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
@@ -42,10 +45,11 @@ class ApiClient {
       throw new Error("Unauthorized");
     }
 
-    const data = await res.json();
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
 
     if (!res.ok) {
-      throw new Error(data.message || "Request failed");
+      throw new Error((data && data.message) || `Request failed (${res.status})`);
     }
 
     return data as T;

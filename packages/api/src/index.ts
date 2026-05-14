@@ -105,13 +105,28 @@ app.setErrorHandler((error: Error, request, reply) => {
   }
 
   // Fastify validation errors
-  const fastifyError = error as Error & { validation?: unknown };
+  const fastifyError = error as Error & { validation?: unknown; code?: string; statusCode?: number };
   if (fastifyError.validation) {
     return reply.status(400).send({
       error: true,
       message: error.message,
       code: 'VALIDATION_ERROR',
       statusCode: 400,
+    });
+  }
+
+  // Other Fastify errors with a 4xx statusCode (content-type, payload, etc.) —
+  // preserve their original status code instead of masking everything as 500.
+  if (
+    typeof fastifyError.statusCode === 'number' &&
+    fastifyError.statusCode >= 400 &&
+    fastifyError.statusCode < 500
+  ) {
+    return reply.status(fastifyError.statusCode).send({
+      error: true,
+      message: error.message,
+      code: fastifyError.code ?? 'CLIENT_ERROR',
+      statusCode: fastifyError.statusCode,
     });
   }
 
