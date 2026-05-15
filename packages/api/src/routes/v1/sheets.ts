@@ -7,6 +7,8 @@ import { buildFilters, filterAnd, filterOr } from '../../utils/query-parser.js';
 import { applyPagination, castNumbers } from '../../utils/pagination.js';
 import { applyLayout, isLayout, sanitizeRange, type Layout } from '../../utils/layout.js';
 import { buildEnvelope, rowsFromValues } from '../../lib/envelope/build.js';
+import { buildAprenderSistemaTarget, TARGET_NAME as APRENDER_TARGET } from '../../lib/targets/aprenderSistema/index.js';
+import { buildAprenderSistemaReport } from '../../lib/targets/aprenderSistema/report.js';
 import { apiAuth } from '../../middleware/api-auth.js';
 import { apiCors } from '../../middleware/cors.js';
 import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
@@ -155,25 +157,39 @@ export async function sheetsRoutes(app: FastifyInstance) {
     // Opt-in only; default response stays a flat array for backward compatibility.
     if (query.envelope === 'v1') {
       const apiName = (sheetApi as any).name || sheetApi.id;
+      let envelope;
       if (sheetName) {
         const values = await sheetsService.getRawValues(
           userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
         );
-        return buildEnvelope({
+        envelope = buildEnvelope({
           apiId: sheetApi.id,
           apiName,
           sheets: [{ name: sheetName, rows: rowsFromValues(values) }],
         });
+      } else {
+        const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
+        envelope = buildEnvelope({
+          apiId: sheetApi.id,
+          apiName,
+          sheets: Object.entries(allRaw).map(([name, values]) => ({
+            name,
+            rows: rowsFromValues(values),
+          })),
+        });
       }
-      const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
-      return buildEnvelope({
-        apiId: sheetApi.id,
-        apiName,
-        sheets: Object.entries(allRaw).map(([name, values]) => ({
-          name,
-          rows: rowsFromValues(values),
-        })),
-      });
+
+      // ?target=<name> attaches a target-shaped projection to the envelope.
+      // Unknown targets are a client error so consumers fail loudly instead
+      // of silently getting the base envelope.
+      if (query.target) {
+        if (query.target !== APRENDER_TARGET) {
+          throw new AppError(400, 'UNSUPPORTED_TARGET', `Unsupported target: "${query.target}". Available: ${APRENDER_TARGET}.`);
+        }
+        return { ...envelope, target: buildAprenderSistemaTarget(envelope) };
+      }
+
+      return envelope;
     }
 
     // ?all_sheets=true — return data from every tab keyed by tab name
@@ -232,6 +248,35 @@ export async function sheetsRoutes(app: FastifyInstance) {
     const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
     const names = await sheetsService.listSheetNames(userId, spreadsheetId);
     return { sheets: names };
+  });
+
+  // GET /:apiId/report — aggregate statistics for a target adapter.
+  // Today only `target=aprender_sistema` is supported; the param is required
+  // so we never have to guess what shape to report on.
+  app.get('/:apiId/report', async (request) => {
+    const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
+    const query = getQueryParams(request);
+
+    if (!query.target) {
+      throw new AppError(400, 'TARGET_REQUIRED', `Missing target. Use ?target=${APRENDER_TARGET}.`);
+    }
+    if (query.target !== APRENDER_TARGET) {
+      throw new AppError(400, 'UNSUPPORTED_TARGET', `Unsupported target: "${query.target}". Available: ${APRENDER_TARGET}.`);
+    }
+
+    const apiName = (sheetApi as any).name || sheetApi.id;
+    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
+    const envelope = buildEnvelope({
+      apiId: sheetApi.id,
+      apiName,
+      sheets: Object.entries(allRaw).map(([name, values]) => ({
+        name,
+        rows: rowsFromValues(values),
+      })),
+    });
+    return buildAprenderSistemaReport(buildAprenderSistemaTarget(envelope));
   });
 
   // GET /:apiId/keys — return column names
