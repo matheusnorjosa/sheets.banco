@@ -18,7 +18,10 @@ They are listed in increasing level of opinion:
 | `GET /api/v1/:apiId?envelope=v1` | Envelope (records / sheets / summary / document) | Stable v1 |
 | `GET /api/v1/:apiId?envelope=v1&target=aprender_sistema` | Envelope **+ `target` field** | Stable v1 |
 | `GET /api/v1/:apiId/report?target=aprender_sistema` | Aggregated counts (no PII) | Stable v1 |
-| `GET /api/v1/:apiId/export.csv?target=aprender_sistema&type=<type>` | CSV per export type | Stable v1 |
+| `GET /api/v1/:apiId/export.csv?target=aprender_sistema&type=<type>` | CSV per export type (streamed) | Stable v1 |
+
+All four of the envelope/target/report/CSV surfaces accept `?sheet=<name>` to
+scope the work to a single tab — see [Per-sheet extraction](#per-sheet-extraction).
 
 ### Backward compatibility
 
@@ -27,6 +30,35 @@ They are listed in increasing level of opinion:
   exactly as before — no `target` key.
 - The `target` field is only attached when `?target=<known>` is explicitly
   requested. Unknown targets return `400 UNSUPPORTED_TARGET`.
+- `?sheet=<name>` is opt-in. Without it, the heavy surfaces still process
+  every tab — fine for small spreadsheets, risky for big ones.
+
+## Per-sheet extraction
+
+For spreadsheets with many tabs or many rows, **always pass `?sheet=<name>`**.
+Each per-sheet request keeps memory bounded to a single tab's worth of records
+regardless of how big the spreadsheet grows. The legacy "all sheets" mode (no
+`?sheet=`) is still supported, but a large enough spreadsheet can run the API
+out of memory.
+
+The recommended consumer pattern (the same one the existing Apps Script
+extraction uses, proven in production for years):
+
+```
+1. GET /api/v1/:apiId/sheets
+   → { "sheets": ["Super", "Vidas", "Brincando", ...] }
+
+2. For each sheet name N:
+   GET /api/v1/:apiId/export.csv?target=aprender_sistema&type=<type>&sheet=N
+   GET /api/v1/:apiId/report?target=aprender_sistema&sheet=N
+   GET /api/v1/:apiId?envelope=v1&target=aprender_sistema&sheet=N
+```
+
+CSV responses are streamed line-by-line (Node `Readable` → HTTP body) so
+even a single huge tab does not materialise as one big string server-side.
+
+To avoid Render cold-starts, ping any lightweight endpoint every few minutes
+(the Apps Script keep-alive uses `GET /api/v1/:apiId?sheet=X&limit=1`).
 
 ## Exportable target types
 
@@ -160,6 +192,17 @@ The adapter is a stateless transform. The destination system or a future PR
 can layer any of the above on top of these CSVs / envelopes.
 
 ## Example URLs
+
+Single-tab (recommended for any spreadsheet that might grow):
+
+```
+GET /api/v1/my-api/sheets
+GET /api/v1/my-api?envelope=v1&target=aprender_sistema&sheet=Super
+GET /api/v1/my-api/report?target=aprender_sistema&sheet=Super
+GET /api/v1/my-api/export.csv?target=aprender_sistema&type=agenda_solicitacoes&sheet=Super
+```
+
+All-tabs (only safe for small spreadsheets):
 
 ```
 GET /api/v1/my-api?envelope=v1&target=aprender_sistema

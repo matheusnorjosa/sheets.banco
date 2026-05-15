@@ -11,7 +11,7 @@ import { buildAprenderSistemaTarget, TARGET_NAME as APRENDER_TARGET } from '../.
 import { buildAprenderSistemaReport } from '../../lib/targets/aprenderSistema/report.js';
 import {
   buildCsvFilename,
-  buildTargetCsv,
+  streamTargetCsv,
   validateCsvExportQuery,
 } from '../../lib/targets/aprenderSistema/csv.js';
 import { apiAuth } from '../../middleware/api-auth.js';
@@ -255,9 +255,45 @@ export async function sheetsRoutes(app: FastifyInstance) {
     return { sheets: names };
   });
 
+  // Shared envelope builder for /report and /export.csv. When ?sheet=<name> is
+  // present we fetch and process that one tab only — bounds memory per request
+  // regardless of how big the spreadsheet grows. Without it we fall back to
+  // the legacy "all sheets" behaviour (kept for backward compat; documented as
+  // for small spreadsheets only).
+  async function buildTargetEnvelope(
+    sheetApi: SheetApiRecord,
+    userId: string,
+    query: Record<string, string>,
+  ) {
+    const apiName = (sheetApi as any).name || sheetApi.id;
+    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    const sheetName = query.sheet;
+    if (sheetName) {
+      const values = await sheetsService.getRawValues(
+        userId, spreadsheetId, sheetName, undefined, sheetApi.cacheTtlSeconds,
+      );
+      return buildEnvelope({
+        apiId: sheetApi.id,
+        apiName,
+        sheets: [{ name: sheetName, rows: rowsFromValues(values) }],
+      });
+    }
+    const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
+    return buildEnvelope({
+      apiId: sheetApi.id,
+      apiName,
+      sheets: Object.entries(allRaw).map(([name, values]) => ({
+        name,
+        rows: rowsFromValues(values),
+      })),
+    });
+  }
+
   // GET /:apiId/report — aggregate statistics for a target adapter.
   // Today only `target=aprender_sistema` is supported; the param is required
   // so we never have to guess what shape to report on.
+  // ?sheet=<name> scopes the report to a single tab (recommended for big
+  // spreadsheets to keep request memory bounded).
   app.get('/:apiId/report', async (request) => {
     const sheetApi = getSheetApi(request);
     const userId = getUserId(request);
@@ -270,23 +306,17 @@ export async function sheetsRoutes(app: FastifyInstance) {
       throw new AppError(400, 'UNSUPPORTED_TARGET', `Unsupported target: "${query.target}". Available: ${APRENDER_TARGET}.`);
     }
 
-    const apiName = (sheetApi as any).name || sheetApi.id;
-    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
-    const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
-    const envelope = buildEnvelope({
-      apiId: sheetApi.id,
-      apiName,
-      sheets: Object.entries(allRaw).map(([name, values]) => ({
-        name,
-        rows: rowsFromValues(values),
-      })),
-    });
+    const envelope = await buildTargetEnvelope(sheetApi, userId, query);
     return buildAprenderSistemaReport(buildAprenderSistemaTarget(envelope));
   });
 
   // GET /:apiId/export.csv — CSV projection of a target adapter, filtered by
   // ?type=<exportable target_type>. Reuses the existing adapter; no extra
   // transform logic lives here.
+  // Body is streamed line-by-line so a million-row sheet won't materialise as
+  // a single string in memory.
+  // ?sheet=<name> scopes the export to a single tab (recommended for big
+  // spreadsheets).
   app.get('/:apiId/export.csv', async (request, reply) => {
     const sheetApi = getSheetApi(request);
     const userId = getUserId(request);
@@ -298,23 +328,12 @@ export async function sheetsRoutes(app: FastifyInstance) {
     }
     const exportType = validated.type;
 
-    const apiName = (sheetApi as any).name || sheetApi.id;
-    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
-    const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
-    const envelope = buildEnvelope({
-      apiId: sheetApi.id,
-      apiName,
-      sheets: Object.entries(allRaw).map(([name, values]) => ({
-        name,
-        rows: rowsFromValues(values),
-      })),
-    });
+    const envelope = await buildTargetEnvelope(sheetApi, userId, query);
     const target = buildAprenderSistemaTarget(envelope);
-    const csv = buildTargetCsv(target, exportType);
 
     reply.header('Content-Type', 'text/csv; charset=utf-8');
     reply.header('Content-Disposition', `attachment; filename="${buildCsvFilename(exportType, sheetApi.id)}"`);
-    return reply.send(csv);
+    return reply.send(streamTargetCsv(target, exportType));
   });
 
   // GET /:apiId/keys — return column names
