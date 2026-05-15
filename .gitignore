@@ -23,12 +23,9 @@ render.yaml
 railway.toml
 .env.example
 
-# Docs (internal plans, not for GitHub)
-docs/*
-!docs/api-reference.md
-!docs/getting-started.md
-!docs/sdk.md
-!docs/aprender-sistema-target.md
+# Internal planning docs (not for GitHub)
+docs/PLANO-MELHORIAS.md
+docs/prompt.md
 
 # Generated
 packages/web/public/*.svg
