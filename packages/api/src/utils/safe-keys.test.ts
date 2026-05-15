@@ -32,17 +32,21 @@ describe('safe-keys helpers', () => {
 });
 
 describe('processSpecialValues — prototype pollution guard', () => {
+  // JSON.parse('{"__proto__":...}') creates an object where __proto__ is an
+  // own enumerable property — exactly what an attacker can send via JSON body.
+  // The `{ __proto__: ... }` literal in source code is a different language
+  // feature (assigns the prototype) and would not represent the threat model.
+
   it('drops __proto__ from result', () => {
-    const out = processSpecialValues({
-      __proto__: 'polluted',
-      nome: 'A',
-    } as Record<string, string>);
+    const malicious = JSON.parse('{"__proto__":"polluted","nome":"A"}') as Record<string, string>;
+    const out = processSpecialValues(malicious);
     expect(out.nome).toBe('A');
     expect(Object.prototype.hasOwnProperty.call(out, '__proto__')).toBe(false);
   });
 
   it('does not pollute Object.prototype', () => {
-    processSpecialValues({ __proto__: 'evil', constructor: 'evil2' } as Record<string, string>);
+    const malicious = JSON.parse('{"__proto__":"evil","constructor":"evil2"}') as Record<string, string>;
+    processSpecialValues(malicious);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     expect(({} as Record<string, unknown>).evil).toBeUndefined();
   });
@@ -57,7 +61,8 @@ describe('processSpecialValues — prototype pollution guard', () => {
 
 describe('sanitizeRow — prototype pollution guard', () => {
   it('drops dangerous keys', () => {
-    const out = sanitizeRow({ __proto__: 'x', constructor: 'y', valid: 'z' } as Record<string, string>);
+    const malicious = JSON.parse('{"__proto__":"x","constructor":"y","valid":"z"}') as Record<string, string>;
+    const out = sanitizeRow(malicious);
     expect(out.valid).toBe('z');
     expect(Object.prototype.hasOwnProperty.call(out, '__proto__')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(out, 'constructor')).toBe(false);

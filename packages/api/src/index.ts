@@ -148,22 +148,17 @@ registerUsageLogger(app);
 
 // Routes
 // Auth routes — strict rate limit (10/min per IP) to defend login/register/2FA
-// against brute force. The onRoute hook attaches rate-limit config to every
-// route registered in this encapsulated scope.
+// against brute force. Register @fastify/rate-limit inside an encapsulated
+// scope; every route registered in this scope inherits the limit.
 app.register(async (scope) => {
-  scope.addHook('onRoute', (route) => {
-    route.config = { ...(route.config ?? {}), rateLimit: authRateLimitOptions() };
-  });
+  await scope.register(import('@fastify/rate-limit'), authRateLimitOptions() as any);
   await scope.register(authRoutes, { prefix: '/auth' });
   await scope.register(auth2faRoutes, { prefix: '/auth' });
 });
 
-// Dashboard routes — permissive rate limit (60/min per user, falls back to IP)
-// scoped per-user when JWT is present, so a single user can't drown others.
+// Dashboard routes — permissive rate limit (60/min per user, falls back to IP).
 app.register(async (scope) => {
-  scope.addHook('onRoute', (route) => {
-    route.config = { ...(route.config ?? {}), rateLimit: dashboardRateLimitOptions() };
-  });
+  await scope.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   await scope.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
   await scope.register(webhookRoutes, { prefix: '/dashboard/apis' });
   await scope.register(logsStreamRoutes, { prefix: '/dashboard/apis' });
