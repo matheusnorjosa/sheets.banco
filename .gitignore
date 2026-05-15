@@ -24,7 +24,11 @@ railway.toml
 .env.example
 
 # Docs (internal plans, not for GitHub)
-docs/
+docs/*
+!docs/api-reference.md
+!docs/getting-started.md
+!docs/sdk.md
+!docs/aprender-sistema-target.md
 
 # Generated
 packages/web/public/*.svg
