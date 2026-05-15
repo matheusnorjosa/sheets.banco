@@ -112,4 +112,108 @@ describe('buildEnvelope', () => {
     expect(env.summary.invalid_records).toBe(1);
     expect(env.summary.errors_by_code.CPF_REQUIRED).toBe(1);
   });
+
+  it('routes "eventos" type to its normalizer', () => {
+    const env = buildEnvelope({
+      apiId: 'api-1',
+      apiName: 'Test',
+      sheets: [
+        {
+          name: 'Eventos',
+          rows: [{
+            id: '1', titulo: 'X', municipio: 'Cidade - BA', ef: '1',
+            tipo: 'Presencial', data: '01/01/2026', inicio: '07:00', fim: '17:00',
+            projeto: 'P', segmento: '', convidado1: 'a@b.com',
+          }],
+        },
+      ],
+    });
+    expect(env.sheets[0].detected_type).toBe('eventos');
+    expect(env.records[0].normalized.titulo_key).toBe('X');
+    expect(env.records[0].import_hash).toMatch(/^sha256:/);
+  });
+
+  it('routes "bloqueios" type', () => {
+    const env = buildEnvelope({
+      apiId: 'api-1',
+      apiName: 'Test',
+      sheets: [
+        {
+          name: 'Bloqueios',
+          rows: [{ 'Usuário': 'X', Inicio: '01/01/2026', Fim: '01/01/2026', Tipo: 'Total' }],
+        },
+      ],
+    });
+    expect(env.sheets[0].detected_type).toBe('bloqueios');
+    expect(env.records[0].normalized.tipo_key).toBe('T');
+  });
+
+  it('routes "deslocamento" type', () => {
+    const env = buildEnvelope({
+      apiId: 'api-1',
+      apiName: 'Test',
+      sheets: [
+        {
+          name: 'DESLOCAMENTO',
+          rows: [{
+            'Município': 'A', 'Tipo': 'Deslocamento', 'Destino': 'B - BA',
+            'Data': '01/01/2026', 'Pessoa 1': 'X', 'Pessoa 2': 'Y',
+          }],
+        },
+      ],
+    });
+    expect(env.sheets[0].detected_type).toBe('deslocamento');
+    const n = env.records[0].normalized as { pessoas: { nome_original: string }[] };
+    expect(n.pessoas).toHaveLength(2);
+  });
+
+  it('routes "disponibilidade_mensal" and resolves dates from sheet name', () => {
+    const row: Record<string, string> = { Formador: 'X' };
+    for (let d = 1; d <= 31; d++) row[String(d)] = '';
+    const env = buildEnvelope({
+      apiId: 'api-1',
+      apiName: 'Test',
+      sheets: [{ name: 'MENSAL MAI 2026', rows: [row] }],
+    });
+    expect(env.sheets[0].detected_type).toBe('disponibilidade_mensal');
+    const n = env.records[0].normalized as { periodo: { mes: number | null; ano: number | null } };
+    expect(n.periodo).toEqual({ tipo: 'mensal', mes: 5, ano: 2026 });
+    expect(env.records[0].import_hash).toMatch(/^sha256:/);
+  });
+
+  it('routes "disponibilidade_anual" with year from sheet name', () => {
+    const env = buildEnvelope({
+      apiId: 'api-1',
+      apiName: 'Test',
+      sheets: [
+        {
+          name: 'ANUAL 2026',
+          rows: [{
+            FORMADOR: 'X',
+            'JAN.': '0', 'FEV.': '0', 'MAR.': '0', 'ABR.': '0',
+            'MAI.': '0', 'JUN.': '0', 'JUL.': '0', 'AGO.': '0',
+            'SET.': '0', 'OUT.': '0', 'NOV.': '0', 'DEZ.': '0',
+          }],
+        },
+      ],
+    });
+    expect(env.sheets[0].detected_type).toBe('disponibilidade_anual');
+    const n = env.records[0].normalized as { periodo: { ano: number | null } };
+    expect(n.periodo.ano).toBe(2026);
+  });
+
+  it('counts the new types in summary.detected_types', () => {
+    const env = buildEnvelope({
+      apiId: 'api-1',
+      apiName: 'Test',
+      sheets: [
+        { name: 'Bloqueios', rows: [{ 'Usuário': 'A', Inicio: '01/01/2026', Fim: '02/01/2026', Tipo: 'T' }] },
+        { name: 'Eventos', rows: [{
+          titulo: 'X', municipio: 'X - BA', data: '01/01/2026', inicio: '07:00', fim: '17:00', projeto: 'P',
+        }] },
+      ],
+    });
+    expect(env.summary.detected_types.bloqueios).toBe(1);
+    expect(env.summary.detected_types.eventos).toBe(1);
+  });
 });
