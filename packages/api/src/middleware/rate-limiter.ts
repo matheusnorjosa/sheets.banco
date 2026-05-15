@@ -30,3 +30,31 @@ export function apiRateLimitOptions() {
     },
   };
 }
+
+/**
+ * Strict per-IP rate limit for authentication routes.
+ * Login/register/2FA are the main brute-force targets, so they get a much
+ * tighter window than the dashboard routes.
+ */
+export function authRateLimitOptions() {
+  return {
+    max: 10,
+    timeWindow: '1 minute',
+    keyGenerator: (request: any) => `auth:${request.ip}`,
+  };
+}
+
+/**
+ * Permissive rate limit for authenticated dashboard routes — protects against
+ * runaway clients without blocking normal UI use.
+ */
+export function dashboardRateLimitOptions() {
+  return {
+    max: 60,
+    timeWindow: '1 minute',
+    keyGenerator: (request: any) => {
+      const userId = (request.user as { sub?: string } | undefined)?.sub;
+      return userId ? `dashboard:user:${userId}` : `dashboard:ip:${request.ip}`;
+    },
+  };
+}

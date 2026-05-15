@@ -10,7 +10,11 @@ import { sheetsRoutes } from './routes/v1/sheets.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboard/apis.js';
 import { registerUsageLogger } from './middleware/usage-logger.js';
-import { registerRateLimiter } from './middleware/rate-limiter.js';
+import {
+  registerRateLimiter,
+  authRateLimitOptions,
+  dashboardRateLimitOptions,
+} from './middleware/rate-limiter.js';
 import redisPlugin from './plugins/redis.js';
 import { initCache } from './services/cache.service.js';
 import { initSheetsWriteQueue } from './queues/sheets-write.queue.js';
@@ -143,15 +147,32 @@ app.setErrorHandler((error: Error, request, reply) => {
 registerUsageLogger(app);
 
 // Routes
-app.register(authRoutes, { prefix: '/auth' });
-app.register(auth2faRoutes, { prefix: '/auth' });
-app.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
-app.register(webhookRoutes, { prefix: '/dashboard/apis' });
-app.register(logsStreamRoutes, { prefix: '/dashboard/apis' });
-app.register(computedFieldRoutes, { prefix: '/dashboard/apis' });
-app.register(snapshotRoutes, { prefix: '/dashboard/apis' });
-app.register(scheduledSyncRoutes, { prefix: '/dashboard/apis' });
-app.register(multiSpreadsheetRoutes, { prefix: '/dashboard/apis' });
+// Auth routes — strict rate limit (10/min per IP) to defend login/register/2FA
+// against brute force. The onRoute hook attaches rate-limit config to every
+// route registered in this encapsulated scope.
+app.register(async (scope) => {
+  scope.addHook('onRoute', (route) => {
+    route.config = { ...(route.config ?? {}), rateLimit: authRateLimitOptions() };
+  });
+  await scope.register(authRoutes, { prefix: '/auth' });
+  await scope.register(auth2faRoutes, { prefix: '/auth' });
+});
+
+// Dashboard routes — permissive rate limit (60/min per user, falls back to IP)
+// scoped per-user when JWT is present, so a single user can't drown others.
+app.register(async (scope) => {
+  scope.addHook('onRoute', (route) => {
+    route.config = { ...(route.config ?? {}), rateLimit: dashboardRateLimitOptions() };
+  });
+  await scope.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
+  await scope.register(webhookRoutes, { prefix: '/dashboard/apis' });
+  await scope.register(logsStreamRoutes, { prefix: '/dashboard/apis' });
+  await scope.register(computedFieldRoutes, { prefix: '/dashboard/apis' });
+  await scope.register(snapshotRoutes, { prefix: '/dashboard/apis' });
+  await scope.register(scheduledSyncRoutes, { prefix: '/dashboard/apis' });
+  await scope.register(multiSpreadsheetRoutes, { prefix: '/dashboard/apis' });
+});
+
 app.register(sheetsRoutes, { prefix: '/api/v1' });
 app.register(importExportRoutes, { prefix: '/api/v1' });
 app.register((await import('./routes/v1/schema.js')).schemaRoutes, { prefix: '/api/v1' });

@@ -1,5 +1,4 @@
 import { Queue } from 'bullmq';
-import * as cache from '../services/cache.service.js';
 
 export interface SyncJobData {
   sheetApiId: string;

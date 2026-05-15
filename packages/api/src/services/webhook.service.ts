@@ -22,8 +22,8 @@ export async function dispatchWebhooks(
     });
 
     for (const sub of subscriptions) {
-      // Create delivery record
-      const delivery = await prisma.webhookDelivery.create({
+      // Create delivery record (id not needed locally — worker reads from queue)
+      await prisma.webhookDelivery.create({
         data: {
           subscriptionId: sub.id,
           event,

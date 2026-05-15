@@ -5,8 +5,6 @@ import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 
-const validEvents = ['row.created', 'row.updated', 'row.deleted', 'rows.cleared'];
-
 const createWebhookSchema = z.object({
   url: z.string().url(),
   events: z.array(z.enum(['row.created', 'row.updated', 'row.deleted', 'rows.cleared'])).min(1),

@@ -198,7 +198,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     if (!existing) throw new NotFoundError('API not found.');
 
     const newToken = crypto.randomUUID();
-    const api = await prisma.sheetApi.update({
+    await prisma.sheetApi.update({
       where: { id },
       data: {
         bearerTokenPrevious: existing.bearerToken,

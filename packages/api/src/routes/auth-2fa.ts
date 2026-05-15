@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 import crypto from 'node:crypto';
 import bcrypt from 'bcrypt';
 import * as OTPAuth from 'otpauth';
