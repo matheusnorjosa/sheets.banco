@@ -9,6 +9,11 @@ import { applyLayout, isLayout, sanitizeRange, type Layout } from '../../utils/l
 import { buildEnvelope, rowsFromValues } from '../../lib/envelope/build.js';
 import { buildAprenderSistemaTarget, TARGET_NAME as APRENDER_TARGET } from '../../lib/targets/aprenderSistema/index.js';
 import { buildAprenderSistemaReport } from '../../lib/targets/aprenderSistema/report.js';
+import {
+  buildCsvFilename,
+  buildTargetCsv,
+  validateCsvExportQuery,
+} from '../../lib/targets/aprenderSistema/csv.js';
 import { apiAuth } from '../../middleware/api-auth.js';
 import { apiCors } from '../../middleware/cors.js';
 import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
@@ -277,6 +282,39 @@ export async function sheetsRoutes(app: FastifyInstance) {
       })),
     });
     return buildAprenderSistemaReport(buildAprenderSistemaTarget(envelope));
+  });
+
+  // GET /:apiId/export.csv — CSV projection of a target adapter, filtered by
+  // ?type=<exportable target_type>. Reuses the existing adapter; no extra
+  // transform logic lives here.
+  app.get('/:apiId/export.csv', async (request, reply) => {
+    const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
+    const query = getQueryParams(request);
+
+    const validated = validateCsvExportQuery({ target: query.target, type: query.type });
+    if (!validated.ok) {
+      throw new AppError(400, validated.code, validated.message);
+    }
+    const exportType = validated.type;
+
+    const apiName = (sheetApi as any).name || sheetApi.id;
+    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
+    const envelope = buildEnvelope({
+      apiId: sheetApi.id,
+      apiName,
+      sheets: Object.entries(allRaw).map(([name, values]) => ({
+        name,
+        rows: rowsFromValues(values),
+      })),
+    });
+    const target = buildAprenderSistemaTarget(envelope);
+    const csv = buildTargetCsv(target, exportType);
+
+    reply.header('Content-Type', 'text/csv; charset=utf-8');
+    reply.header('Content-Disposition', `attachment; filename="${buildCsvFilename(exportType, sheetApi.id)}"`);
+    return reply.send(csv);
   });
 
   // GET /:apiId/keys — return column names
