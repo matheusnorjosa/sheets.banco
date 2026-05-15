@@ -90,3 +90,26 @@ export function detectType(headers: string[]): SheetType {
 function hasAll(keys: Set<string>, required: string[]): boolean {
   return required.every((r) => keys.has(r));
 }
+
+export interface SheetWithType {
+  name: string;
+  detected_type: SheetType;
+  columns: string[];
+}
+
+/**
+ * Pure mapper used by the typed-discovery endpoint. Takes a list of tab names
+ * and, in the same order, the first row (headers) fetched for each tab.
+ * Missing/short header arrays are treated as empty — the tab is still
+ * reported, just classified as `unknown`.
+ */
+export function buildSheetsWithTypes(
+  names: string[],
+  headersByIndex: ReadonlyArray<ReadonlyArray<string> | null | undefined>,
+): SheetWithType[] {
+  return names.map((name, i) => {
+    const raw = headersByIndex[i] ?? [];
+    const columns = raw.map((h) => String(h ?? ''));
+    return { name, detected_type: detectType(columns), columns };
+  });
+}

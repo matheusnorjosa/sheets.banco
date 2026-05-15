@@ -45,14 +45,27 @@ The recommended consumer pattern (the same one the existing Apps Script
 extraction uses, proven in production for years):
 
 ```
-1. GET /api/v1/:apiId/sheets
-   → { "sheets": ["Super", "Vidas", "Brincando", ...] }
+1. GET /api/v1/:apiId/sheets?include=types
+   → {
+       "sheets": [
+         { "name": "Super",  "detected_type": "agenda",    "columns": [...] },
+         { "name": "Random", "detected_type": "unknown",   "columns": [...] }
+       ]
+     }
 
-2. For each sheet name N:
+2. For each sheet whose detected_type is exportable:
    GET /api/v1/:apiId/export.csv?target=aprender_sistema&type=<type>&sheet=N
    GET /api/v1/:apiId/report?target=aprender_sistema&sheet=N
    GET /api/v1/:apiId?envelope=v1&target=aprender_sistema&sheet=N
 ```
+
+`?include=types` fetches only the first row of each tab (one batched call,
+~100ms regardless of spreadsheet size), classifies via the same `detectType`
+the envelope uses, and lets the consumer plan extraction without
+hardcoding tab names or pulling cell data to discover the schema.
+
+Without `?include=types`, `/sheets` keeps its legacy shape
+(`{ sheets: string[] }`) for backward compatibility.
 
 CSV responses are streamed line-by-line (Node `Readable` → HTTP body) so
 even a single huge tab does not materialise as one big string server-side.
@@ -196,7 +209,7 @@ can layer any of the above on top of these CSVs / envelopes.
 Single-tab (recommended for any spreadsheet that might grow):
 
 ```
-GET /api/v1/my-api/sheets
+GET /api/v1/my-api/sheets?include=types
 GET /api/v1/my-api?envelope=v1&target=aprender_sistema&sheet=Super
 GET /api/v1/my-api/report?target=aprender_sistema&sheet=Super
 GET /api/v1/my-api/export.csv?target=aprender_sistema&type=agenda_solicitacoes&sheet=Super
