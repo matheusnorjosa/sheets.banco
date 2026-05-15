@@ -6,6 +6,7 @@ import * as QRCode from 'qrcode';
 import { prisma } from '../lib/prisma.js';
 import { ValidationError } from '../lib/errors.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
+import { authRateLimitOptions } from '../middleware/rate-limiter.js';
 
 function generateRecoveryCodes(count = 10): string[] {
   return Array.from({ length: count }, () =>
@@ -14,6 +15,9 @@ function generateRecoveryCodes(count = 10): string[] {
 }
 
 export async function auth2faRoutes(app: FastifyInstance) {
+  // Strict per-IP rate limit (10/min) — 2FA endpoints are brute-force targets.
+  await app.register(import('@fastify/rate-limit'), authRateLimitOptions() as any);
+
   // POST /auth/2fa/setup — generate TOTP secret and QR code
   app.post('/2fa/setup', { preHandler: [jwtAuth] }, async (request, reply) => {
     const { sub } = request.user as { sub: string };

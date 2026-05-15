@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
+import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 
 const createWebhookSchema = z.object({
   url: z.string().url(),
@@ -21,6 +22,7 @@ function getUserId(request: any): string {
 }
 
 export async function webhookRoutes(app: FastifyInstance) {
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   app.addHook('onRequest', jwtAuth);
 
   // GET /dashboard/apis/:id/webhooks — list webhooks

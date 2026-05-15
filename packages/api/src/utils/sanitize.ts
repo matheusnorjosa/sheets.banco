@@ -1,4 +1,4 @@
-import { createSafeRecord, isSafeKey } from './safe-keys.js';
+import { createSafeRecord } from './safe-keys.js';
 
 /**
  * Sanitize cell values to prevent spreadsheet formula injection.
@@ -18,7 +18,11 @@ export function sanitizeValue(value: string): string {
 export function sanitizeRow(row: Record<string, string>): Record<string, string> {
   const sanitized = createSafeRecord<string>();
   for (const [key, value] of Object.entries(row)) {
-    if (!isSafeKey(key)) continue;
+    // Inline guard against prototype-polluting keys — CodeQL's
+    // js/remote-property-injection only recognizes literal string comparisons.
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
     sanitized[key] = sanitizeValue(value);
   }
   return sanitized;

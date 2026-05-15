@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
+import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 
 const addSheetSchema = z.object({
@@ -20,6 +21,7 @@ function extractSpreadsheetId(urlOrId: string): string {
 }
 
 export async function multiSpreadsheetRoutes(app: FastifyInstance) {
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   app.addHook('onRequest', jwtAuth);
 
   // GET /dashboard/apis/:id/spreadsheets — list additional spreadsheets

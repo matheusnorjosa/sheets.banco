@@ -10,11 +10,7 @@ import { sheetsRoutes } from './routes/v1/sheets.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboard/apis.js';
 import { registerUsageLogger } from './middleware/usage-logger.js';
-import {
-  registerRateLimiter,
-  authRateLimitOptions,
-  dashboardRateLimitOptions,
-} from './middleware/rate-limiter.js';
+import { registerRateLimiter } from './middleware/rate-limiter.js';
 import redisPlugin from './plugins/redis.js';
 import { initCache } from './services/cache.service.js';
 import { initSheetsWriteQueue } from './queues/sheets-write.queue.js';
@@ -147,27 +143,18 @@ app.setErrorHandler((error: Error, request, reply) => {
 registerUsageLogger(app);
 
 // Routes
-// Auth routes — strict rate limit (10/min per IP) to defend login/register/2FA
-// against brute force. Register @fastify/rate-limit inside an encapsulated
-// scope; every route registered in this scope inherits the limit.
-app.register(async (scope) => {
-  await scope.register(import('@fastify/rate-limit'), authRateLimitOptions() as any);
-  await scope.register(authRoutes, { prefix: '/auth' });
-  await scope.register(auth2faRoutes, { prefix: '/auth' });
-});
-
-// Dashboard routes — permissive rate limit (60/min per user, falls back to IP).
-app.register(async (scope) => {
-  await scope.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
-  await scope.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
-  await scope.register(webhookRoutes, { prefix: '/dashboard/apis' });
-  await scope.register(logsStreamRoutes, { prefix: '/dashboard/apis' });
-  await scope.register(computedFieldRoutes, { prefix: '/dashboard/apis' });
-  await scope.register(snapshotRoutes, { prefix: '/dashboard/apis' });
-  await scope.register(scheduledSyncRoutes, { prefix: '/dashboard/apis' });
-  await scope.register(multiSpreadsheetRoutes, { prefix: '/dashboard/apis' });
-});
-
+// Rate-limiting is registered inside each route file's exported function
+// (auth*.ts: 10/min per IP; dashboard/*.ts: 60/min per user) so CodeQL can
+// statically verify the protection. /api/v1/* follows the same pattern.
+app.register(authRoutes, { prefix: '/auth' });
+app.register(auth2faRoutes, { prefix: '/auth' });
+app.register(dashboardApiRoutes, { prefix: '/dashboard/apis' });
+app.register(webhookRoutes, { prefix: '/dashboard/apis' });
+app.register(logsStreamRoutes, { prefix: '/dashboard/apis' });
+app.register(computedFieldRoutes, { prefix: '/dashboard/apis' });
+app.register(snapshotRoutes, { prefix: '/dashboard/apis' });
+app.register(scheduledSyncRoutes, { prefix: '/dashboard/apis' });
+app.register(multiSpreadsheetRoutes, { prefix: '/dashboard/apis' });
 app.register(sheetsRoutes, { prefix: '/api/v1' });
 app.register(importExportRoutes, { prefix: '/api/v1' });
 app.register((await import('./routes/v1/schema.js')).schemaRoutes, { prefix: '/api/v1' });
