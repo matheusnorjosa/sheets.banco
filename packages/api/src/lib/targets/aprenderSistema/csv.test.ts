@@ -6,15 +6,18 @@ import {
   DISPONIBILIDADE_BLOQUEIOS_HEADERS,
   EXPORT_TYPES,
   escapeCsvField,
+  generateTargetCsvLines,
   isExportType,
   PRODUTOS_CONTROLE_HEADERS,
   REVIEW_HEADERS,
+  streamTargetCsv,
   USUARIOS_HEADERS,
   rowsToCsv,
   validateCsvExportQuery,
 } from './csv.js';
 import { buildAprenderSistemaTarget } from './index.js';
 import { envelopeOf } from './test-helpers.js';
+import { buildEnvelope } from '../../envelope/build.js';
 
 describe('escapeCsvField', () => {
   it('returns empty string for null and undefined', () => {
@@ -208,6 +211,91 @@ describe('buildTargetCsv — disponibilidade_bloqueios', () => {
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('alice@example.com');
     expect(lines[1]).not.toContain('bob@example.com');
+  });
+});
+
+// ---------- generators / streaming ----------
+
+async function collectStream(target: ReturnType<typeof buildAprenderSistemaTarget>, type: typeof EXPORT_TYPES[number]): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of streamTargetCsv(target, type)) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+describe('generateTargetCsvLines / streamTargetCsv', () => {
+  // Build a small envelope with one row per detectable sheet so every
+  // exportable target_type plus review has at least one record. Keeps
+  // equivalence assertions meaningful across all 5 types.
+  function fixtureTarget() {
+    return buildAprenderSistemaTarget(buildEnvelope({
+      apiId: 'x', apiName: 'x',
+      sheets: [
+        { name: 'Usuários', rows: [
+          { Nome: 'A', CPF: '12345678901', Email: 'a@example.com', Cargo: 'X', 'Gerência': 'Y' },
+        ]},
+        { name: 'Controle', rows: [
+          { F: '1', Produto: 'Livro X', 'Quant.': '10', 'Município': 'Fortaleza', UF: 'CE', Data: '01/01/2026' },
+        ]},
+        { name: 'Eventos', rows: [
+          { titulo: 'Encontro', municipio: 'Salvador - BA', data: '01/01/2026',
+            inicio: '09:00', fim: '17:00', projeto: 'Projeto X' },
+        ]},
+        { name: 'Bloqueios', rows: [
+          { Usuario: 'alice@example.com', 'Início': '2026-01-01', Fim: '2026-01-02', Tipo: 'T' },
+        ]},
+        { name: 'Random', rows: [{ foo: 'bar' }] }, // → review
+      ],
+    }));
+  }
+
+  it.each(EXPORT_TYPES)('stream output equals sync output byte-for-byte (%s)', async (type) => {
+    const target = fixtureTarget();
+    const sync = buildTargetCsv(target, type);
+    const streamed = await collectStream(target, type);
+    expect(streamed).toBe(sync);
+  });
+
+  it('first emitted chunk of the generator is the header line + CRLF', () => {
+    const target = fixtureTarget();
+    const gen = generateTargetCsvLines(target, 'usuarios');
+    const first = gen.next();
+    expect(first.done).toBe(false);
+    expect(first.value).toBe(USUARIOS_HEADERS.join(',') + '\r\n');
+  });
+
+  it('emits header + one chunk per data row (review fixture)', () => {
+    const target = fixtureTarget();
+    const chunks = Array.from(generateTargetCsvLines(target, 'review'));
+    // 1 header + N review records.
+    const reviewCount = target.records.filter((r) => r.target_type === 'review').length;
+    expect(chunks).toHaveLength(1 + reviewCount);
+    expect(chunks[0]).toBe(REVIEW_HEADERS.join(',') + '\r\n');
+    for (let i = 1; i < chunks.length; i++) {
+      expect(chunks[i].endsWith('\r\n')).toBe(true);
+    }
+  });
+
+  it('handles empty record sets — emits only the header line', async () => {
+    // An envelope made of only-unknown rows produces 0 usuarios but the
+    // CSV must still carry the headers so consumers can parse it.
+    const env = envelopeOf('Random', [{ foo: 'bar' }]);
+    const target = buildAprenderSistemaTarget(env);
+    const streamed = await collectStream(target, 'usuarios');
+    expect(streamed).toBe(USUARIOS_HEADERS.join(',') + '\r\n');
+  });
+
+  it('streams a large synthetic dataset without errors', async () => {
+    // Build 500 review records via a single envelope to prove the generator
+    // walks the full set and produces the expected line count.
+    const rows = Array.from({ length: 500 }, (_, i) => ({ col: 'v' + i }));
+    const env = envelopeOf('RandomBig', rows);
+    const target = buildAprenderSistemaTarget(env);
+    const streamed = await collectStream(target, 'review');
+    const lineCount = streamed.split('\r\n').filter((l) => l.length > 0).length;
+    // 1 header + 500 data lines.
+    expect(lineCount).toBe(501);
   });
 });
 
