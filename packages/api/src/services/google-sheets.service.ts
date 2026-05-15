@@ -1,5 +1,4 @@
 import { google, type sheets_v4 } from 'googleapis';
-import { env } from '../config/env.js';
 import { NotFoundError, SheetAccessError, AppError } from '../lib/errors.js';
 import { processSpecialValues } from '../utils/special-values.js';
 import * as cache from './cache.service.js';

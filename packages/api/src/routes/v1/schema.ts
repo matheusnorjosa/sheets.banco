@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
-import { NotFoundError, AppError } from '../../lib/errors.js';
+import { NotFoundError } from '../../lib/errors.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 
 function inferType(values: string[]): string {
