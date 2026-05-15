@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
+import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 
 function getUserId(request: any): string {
@@ -9,6 +10,7 @@ function getUserId(request: any): string {
 }
 
 export async function snapshotRoutes(app: FastifyInstance) {
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   app.addHook('onRequest', jwtAuth);
 
   // POST /dashboard/apis/:id/snapshots — create a snapshot of current data

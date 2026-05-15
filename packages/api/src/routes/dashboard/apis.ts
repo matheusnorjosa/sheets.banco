@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError, AppError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
+import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 
 const slugRegex = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
@@ -41,6 +42,9 @@ function extractSpreadsheetId(urlOrId: string): string {
 }
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
+  // 60 req/min per user (falls back to IP) — protects against runaway clients.
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+
   // All dashboard routes require JWT
   app.addHook('onRequest', jwtAuth);
 

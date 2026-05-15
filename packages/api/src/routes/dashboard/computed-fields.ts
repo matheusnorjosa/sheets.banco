@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
+import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 
 const createFieldSchema = z.object({
   name: z.string().min(1).max(50).regex(/^\w+$/, 'Name must be alphanumeric with underscores'),
@@ -14,6 +15,7 @@ function getUserId(request: any): string {
 }
 
 export async function computedFieldRoutes(app: FastifyInstance) {
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   app.addHook('onRequest', jwtAuth);
 
   // GET /dashboard/apis/:id/computed-fields — list computed fields

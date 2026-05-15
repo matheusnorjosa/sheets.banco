@@ -1,6 +1,6 @@
 import type { SheetRow } from '../services/google-sheets.service.js';
 import { sanitizeValue } from './sanitize.js';
-import { createSafeRecord, isSafeKey } from './safe-keys.js';
+import { createSafeRecord } from './safe-keys.js';
 
 /**
  * Process special placeholder values in row data:
@@ -16,7 +16,12 @@ export function processSpecialValues(row: SheetRow): SheetRow {
   const now = new Date();
 
   for (const [key, value] of Object.entries(row)) {
-    if (!isSafeKey(key)) continue;
+    // Inline guard against prototype-polluting keys — CodeQL's
+    // js/remote-property-injection only recognizes literal string comparisons
+    // here, not custom helper functions.
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
     switch (value) {
       case 'TIMESTAMP':
         result[key] = String(Math.floor(now.getTime() / 1000));

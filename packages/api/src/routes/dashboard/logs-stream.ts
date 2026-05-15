@@ -2,8 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
+import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 
 export async function logsStreamRoutes(app: FastifyInstance) {
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+
   // GET /dashboard/apis/:id/logs/stream — SSE endpoint for live logs
   app.get('/:id/logs/stream', { preHandler: [jwtAuth] }, async (request, reply) => {
     const { sub } = request.user as { sub: string };
