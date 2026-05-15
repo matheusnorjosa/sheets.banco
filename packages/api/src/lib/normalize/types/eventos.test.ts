@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeEventoRow } from './eventos.js';
 
-describe('normalizeEventoRow', () => {
+describe('normalizeEventoRow — base flow', () => {
   it('normalizes typical row', () => {
     const { normalized, validation } = normalizeEventoRow({
       id: '42',
@@ -38,25 +38,12 @@ describe('normalizeEventoRow', () => {
       projeto_original: 'Tema',
       projeto_key: 'TEMA',
       segmento: '1 e 2',
-      convidados: ['fulano@example.com', 'beltrana@example.com'],
+      convidados_emails: ['fulano@example.com', 'beltrana@example.com'],
+      convidados_nomes: [],
+      convidados_invalidos: [],
+      flags: {},
     });
     expect(validation.status).toBe('valid');
-  });
-
-  it('warns on non-email convidados and drops them from the array', () => {
-    const { normalized, validation } = normalizeEventoRow({
-      titulo: 'Foo',
-      municipio: 'X - BA',
-      data: '01/01/2026',
-      inicio: '07:00',
-      fim: '17:00',
-      projeto: 'P',
-      convidado1: 'Nome Pessoa',
-    });
-
-    expect(normalized.convidados).toEqual([]);
-    expect(validation.status).toBe('warning');
-    expect(validation.warnings.some((w) => w.code === 'GUEST_NOT_EMAIL')).toBe(true);
   });
 
   it('errors when fim <= inicio', () => {
@@ -82,5 +69,132 @@ describe('normalizeEventoRow', () => {
     });
     expect(validation.errors.some((e) => e.code === 'TITLE_REQUIRED')).toBe(true);
     expect(validation.errors.some((e) => e.code === 'PROJECT_REQUIRED')).toBe(true);
+  });
+});
+
+describe('normalizeEventoRow — convidados split', () => {
+  const base = {
+    titulo: 'Foo',
+    municipio: 'X - BA',
+    data: '01/01/2026',
+    inicio: '07:00',
+    fim: '17:00',
+    projeto: 'P',
+  };
+
+  it('routes valid emails to convidados_emails', () => {
+    const { normalized } = normalizeEventoRow({
+      ...base,
+      convidado1: 'a@example.com',
+      convidado2: 'b@example.com',
+    });
+    expect(normalized.convidados_emails).toEqual(['a@example.com', 'b@example.com']);
+    expect(normalized.convidados_nomes).toEqual([]);
+    expect(normalized.convidados_invalidos).toEqual([]);
+  });
+
+  it('routes plain names to convidados_nomes with GUEST_NOT_EMAIL warning', () => {
+    const { normalized, validation } = normalizeEventoRow({
+      ...base,
+      convidado1: 'Pessoa Exemplo',
+    });
+    expect(normalized.convidados_nomes).toEqual(['Pessoa Exemplo']);
+    expect(normalized.convidados_emails).toEqual([]);
+    expect(normalized.convidados_invalidos).toEqual([]);
+    expect(validation.warnings.some((w) => w.code === 'GUEST_NOT_EMAIL')).toBe(true);
+  });
+
+  it('ignores empty convidados', () => {
+    const { normalized, validation } = normalizeEventoRow({
+      ...base,
+      convidado1: '',
+      convidado2: '   ',
+    });
+    expect(normalized.convidados_emails).toEqual([]);
+    expect(normalized.convidados_nomes).toEqual([]);
+    expect(normalized.convidados_invalidos).toEqual([]);
+    expect(validation.warnings.some((w) => w.code === 'GUEST_NOT_EMAIL')).toBe(false);
+  });
+
+  it('routes malformed-email-looking values to convidados_invalidos', () => {
+    const { normalized, validation } = normalizeEventoRow({
+      ...base,
+      convidado1: 'foo@',           // has @ but malformed
+      convidado2: 'broken@email',   // has @ but no TLD
+    });
+    expect(normalized.convidados_invalidos).toEqual(['foo@', 'broken@email']);
+    expect(normalized.convidados_emails).toEqual([]);
+    expect(normalized.convidados_nomes).toEqual([]);
+    expect(validation.warnings.filter((w) => w.code === 'GUEST_INVALID_VALUE')).toHaveLength(2);
+  });
+
+  it('mixes all three buckets when needed', () => {
+    const { normalized } = normalizeEventoRow({
+      ...base,
+      convidado1: 'real@example.com',
+      convidado2: 'Pessoa Y',
+      convidado3: '@@@',
+    });
+    expect(normalized.convidados_emails).toEqual(['real@example.com']);
+    expect(normalized.convidados_nomes).toEqual(['Pessoa Y']);
+    expect(normalized.convidados_invalidos).toEqual(['@@@']);
+  });
+});
+
+describe('normalizeEventoRow — SIM/NÃO heuristic on id and titulo', () => {
+  const base = {
+    municipio: 'X - BA',
+    data: '01/01/2026',
+    inicio: '07:00',
+    fim: '17:00',
+    projeto: 'P',
+  };
+
+  it('id="SIM" → external_id null + flags.id_boolean=true + warning', () => {
+    const { normalized, validation } = normalizeEventoRow({
+      ...base, id: 'SIM', titulo: 'Real titulo',
+    });
+    expect(normalized.external_id).toBeNull();
+    expect(normalized.flags.id_boolean).toBe(true);
+    expect(validation.warnings.some((w) => w.code === 'SUSPICIOUS_ID_BOOLEAN')).toBe(true);
+  });
+
+  it('id="NÃO" → flags.id_boolean=false', () => {
+    const { normalized } = normalizeEventoRow({
+      ...base, id: 'NÃO', titulo: 'Real titulo',
+    });
+    expect(normalized.external_id).toBeNull();
+    expect(normalized.flags.id_boolean).toBe(false);
+  });
+
+  it('titulo="SIM" → titulo and titulo_key null + flags.titulo_boolean + warning', () => {
+    const { normalized, validation } = normalizeEventoRow({
+      ...base, id: '42', titulo: 'SIM',
+    });
+    expect(normalized.titulo).toBeNull();
+    expect(normalized.titulo_key).toBeNull();
+    expect(normalized.flags.titulo_boolean).toBe(true);
+    expect(validation.warnings.some((w) => w.code === 'SUSPICIOUS_TITLE_BOOLEAN')).toBe(true);
+    // TITLE_REQUIRED should NOT also fire — the warning already conveys the issue.
+    expect(validation.errors.some((e) => e.code === 'TITLE_REQUIRED')).toBe(false);
+  });
+
+  it('does not flag normal id/titulo values', () => {
+    const { normalized, validation } = normalizeEventoRow({
+      ...base, id: '42', titulo: 'Formação Real',
+    });
+    expect(normalized.external_id).toBe('42');
+    expect(normalized.titulo).toBe('Formação Real');
+    expect(normalized.flags).toEqual({});
+    expect(validation.warnings.some((w) => w.code === 'SUSPICIOUS_ID_BOOLEAN')).toBe(false);
+    expect(validation.warnings.some((w) => w.code === 'SUSPICIOUS_TITLE_BOOLEAN')).toBe(false);
+  });
+
+  it('handles all recognized boolean tokens', () => {
+    for (const tok of ['SIM', 'NÃO', 'NAO', 'TRUE', 'FALSE', '1', '0']) {
+      const { normalized } = normalizeEventoRow({ ...base, id: tok, titulo: 'X' });
+      expect(normalized.external_id).toBeNull();
+      expect(typeof normalized.flags.id_boolean).toBe('boolean');
+    }
   });
 });

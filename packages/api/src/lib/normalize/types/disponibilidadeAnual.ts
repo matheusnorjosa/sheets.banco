@@ -10,6 +10,18 @@ export interface MesAnual {
   valor_normalizado: number | null;
 }
 
+export interface RankingMensal {
+  mes: number;
+  valor_original: string;
+  ranking: number | null;
+}
+
+export interface RankingExtra {
+  key: string;
+  valor_original: string;
+  ranking: number | null;
+}
+
 export interface NormalizedDisponibilidadeAnual {
   usuario_original: string;
   usuario_key: string;
@@ -19,6 +31,8 @@ export interface NormalizedDisponibilidadeAnual {
   };
   meses: MesAnual[];
   ranking: number | null;
+  rankings_mensais: RankingMensal[];
+  ranking_extra: RankingExtra | null;
 }
 
 export interface AnualContext {
@@ -49,6 +63,18 @@ function parseNumberValue(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Match a header to a Rk<N> ranking column.
+ * Returns N for Rk1..Rk13, otherwise null. Case- and whitespace-tolerant.
+ */
+function parseRkColumn(header: string): number | null {
+  const m = header.trim().match(/^Rk(\d{1,2})$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (n < 1 || n > 13) return null;
+  return n;
+}
+
 export function normalizeDisponibilidadeAnualRow(
   row: RawRow,
   context: AnualContext = { ano: null },
@@ -62,6 +88,8 @@ export function normalizeDisponibilidadeAnualRow(
   const usuario_original = userKey ? collapseSpaces(trimAll(r.raw(userKey))) : '';
 
   const meses: MesAnual[] = [];
+  const rankings_mensais: RankingMensal[] = [];
+  let ranking_extra: RankingExtra | null = null;
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
 
@@ -81,8 +109,31 @@ export function normalizeDisponibilidadeAnualRow(
   }
   meses.sort((a, b) => a.mes - b.mes);
 
-  // Ranking only when the sheet has a literal "Ranking" column. We deliberately
-  // skip Rk1..Rk13 because those look derived (per-month rank).
+  // Rk1..Rk12 map to months 1..12 as per-month ranking. Rk13 is intentionally
+  // preserved as "ranking_extra" — its semantics aren't confirmed (could be
+  // overall ranking, could be something else).
+  for (const k of Object.keys(row)) {
+    const rk = parseRkColumn(k);
+    if (rk === null) continue;
+    const valor_original = trimAll(row[k]);
+    const ranking = valor_original ? parseNumberValue(valor_original) : null;
+    if (valor_original && ranking === null) {
+      warnings.push({
+        code: 'RANKING_NON_NUMERIC',
+        message: `Ranking não numérico em ${k}: "${valor_original}".`,
+        field: k,
+      });
+    }
+    if (rk <= 12) {
+      rankings_mensais.push({ mes: rk, valor_original, ranking });
+    } else {
+      // Rk13 — preserved without business meaning.
+      ranking_extra = { key: k.trim(), valor_original, ranking };
+    }
+  }
+  rankings_mensais.sort((a, b) => a.mes - b.mes);
+
+  // Ranking literal column (legacy single-value field). Kept for back-compat.
   const rankingRaw = trimAll(r.get('Ranking'));
   const ranking = rankingRaw ? parseNumberValue(rankingRaw) : null;
   if (rankingRaw && ranking === null) {
@@ -102,6 +153,8 @@ export function normalizeDisponibilidadeAnualRow(
     },
     meses,
     ranking,
+    rankings_mensais,
+    ranking_extra,
   };
 
   if (!usuario_original) {

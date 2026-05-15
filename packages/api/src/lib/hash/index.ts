@@ -86,11 +86,14 @@ export function importHash(
     }
     case 'eventos': {
       const n = normalized as NormalizedEvento;
-      // Prefer external_id when present (stable across renames). Otherwise
-      // fall back to the structural fields.
+      // Prefer a real external_id when present (stable across renames). Note:
+      // suspicious-boolean ids (SIM/NÃO) have been nulled out upstream, so we
+      // never key off them here. Otherwise fall back to the structural fields.
       if (n.external_id) {
         return sha256(['eventos', 'id:' + n.external_id].join('|'));
       }
+      // Without an id we need at least enough structure to identify the event.
+      if (!n.titulo_key) return null;
       return sha256(
         [
           'eventos',
