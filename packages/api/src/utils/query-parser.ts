@@ -68,7 +68,7 @@ function parseFilter(column: string, value: string, caseSensitive: boolean): Fil
 const RESERVED_PARAMS = new Set([
   'limit', 'offset', 'sort_by', 'sort_order',
   'sheet', 'casesensitive', 'cast_numbers', 'single_object',
-  'layout', 'range', 'all_sheets', 'include_computed', 'source', 'version', 'sync', 'envelope',
+  'layout', 'range', 'all_sheets', 'include_computed', 'source', 'version', 'sync', 'envelope', 'target',
 ]);
 
 export function buildFilters(
