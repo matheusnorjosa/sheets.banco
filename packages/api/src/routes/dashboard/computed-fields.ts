@@ -15,7 +15,7 @@ function getUserId(request: any): string {
 }
 
 export async function computedFieldRoutes(app: FastifyInstance) {
-  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+  app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   app.addHook('onRequest', jwtAuth);
 
   // GET /dashboard/apis/:id/computed-fields — list computed fields

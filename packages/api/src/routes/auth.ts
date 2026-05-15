@@ -31,7 +31,7 @@ function createOAuth2Client() {
 export async function authRoutes(app: FastifyInstance) {
   // Strict per-IP rate limit applied to every route below — defends
   // login/register/2FA from brute force.
-  await app.register(import('@fastify/rate-limit'), authRateLimitOptions() as any);
+  app.register(import('@fastify/rate-limit'), authRateLimitOptions() as any);
 
   // POST /auth/register
   app.post('/register', async (request, reply) => {
