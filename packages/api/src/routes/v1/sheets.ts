@@ -245,12 +245,19 @@ export async function sheetsRoutes(app: FastifyInstance) {
     return rows;
   });
 
-  // GET /:apiId/sheets — list all tab names
+  // GET /:apiId/sheets — list all tab names.
+  // ?include=types enriches each entry with detected_type + columns by fetching
+  // just the header row of every tab. Lets consumers plan per-sheet extraction
+  // without paying for cell data first.
   app.get('/:apiId/sheets', async (request) => {
     const sheetApi = getSheetApi(request);
     const userId = getUserId(request);
     const query = getQueryParams(request);
     const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    if (query.include === 'types') {
+      const typed = await sheetsService.listSheetsWithTypes(userId, spreadsheetId);
+      return { sheets: typed };
+    }
     const names = await sheetsService.listSheetNames(userId, spreadsheetId);
     return { sheets: names };
   });

@@ -3,6 +3,9 @@ import { NotFoundError, SheetAccessError, AppError } from '../lib/errors.js';
 import { processSpecialValues } from '../utils/special-values.js';
 import * as cache from './cache.service.js';
 import { getOAuthClient } from './oauth-pool.service.js';
+import { buildSheetsWithTypes, type SheetWithType } from '../lib/detect/index.js';
+
+export type { SheetWithType };
 
 export interface SheetRow {
   [key: string]: string;
@@ -89,6 +92,7 @@ export async function invalidateCache(spreadsheetId: string): Promise<void> {
   await cache.invalidate(`raw:${spreadsheetId}`);
   await cache.invalidate(`allRaw:${spreadsheetId}`);
   await cache.invalidate(`sheetList:${spreadsheetId}`);
+  await cache.invalidate(`sheetListTyped:${spreadsheetId}`);
 }
 
 /**
@@ -114,6 +118,46 @@ export async function listSheetNames(
       .filter((n): n is string => typeof n === 'string');
     await cache.set(cacheKey, names, cacheTtl);
     return names;
+  } catch (error) {
+    return handleSheetError(error);
+  }
+}
+
+/**
+ * List all tabs with their detected target type. Fetches only the first row
+ * of each tab (one batched call) so the consumer can plan per-sheet extraction
+ * without paying for cell data first.
+ */
+export async function listSheetsWithTypes(
+  userId: string,
+  spreadsheetId: string,
+  cacheTtl = 300,
+): Promise<SheetWithType[]> {
+  const cacheKey = `sheetListTyped:${spreadsheetId}`;
+  const cached = await cache.get<SheetWithType[]>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const names = await listSheetNames(userId, spreadsheetId, cacheTtl);
+    if (names.length === 0) {
+      await cache.set(cacheKey, [], cacheTtl);
+      return [];
+    }
+    const sheets = await getSheetsClient(userId);
+    // A1 notation: double single quotes inside the tab name.
+    const ranges = names.map((n) => `'${n.replace(/'/g, "''")}'!1:1`);
+    const response = await sheets.spreadsheets.values.batchGet({
+      spreadsheetId,
+      ranges,
+    });
+    const valueRanges = response.data.valueRanges ?? [];
+    const headersByIndex = names.map((_, i) => {
+      const firstRow = valueRanges[i]?.values?.[0];
+      return Array.isArray(firstRow) ? (firstRow as string[]) : [];
+    });
+    const result = buildSheetsWithTypes(names, headersByIndex);
+    await cache.set(cacheKey, result, cacheTtl);
+    return result;
   } catch (error) {
     return handleSheetError(error);
   }
