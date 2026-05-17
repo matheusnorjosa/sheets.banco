@@ -14,6 +14,7 @@ import {
   streamTargetCsv,
   validateCsvExportQuery,
 } from '../../lib/targets/aprenderSistema/csv.js';
+import { findSheetApiCached } from '../../services/sheet-api-cache.service.js';
 import { apiAuth } from '../../middleware/api-auth.js';
 import { apiCors } from '../../middleware/cors.js';
 import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
@@ -86,17 +87,14 @@ export async function sheetsRoutes(app: FastifyInstance) {
   // Apply per-API rate limiting
   app.register(import('@fastify/rate-limit'), apiRateLimitOptions() as any);
 
-  // Resolve SheetApi from :apiId param (supports both ID and slug)
-  app.addHook('onRequest', async (request, reply) => {
+  // Resolve SheetApi from :apiId param (supports both ID and slug). Goes
+  // through a Redis-backed cache so the hot path on every request doesn't
+  // wake Neon — was the #1 driver of CU-hour burn before this change.
+  app.addHook('onRequest', async (request) => {
     const { apiId } = request.params as { apiId?: string };
     if (!apiId) return;
 
-    // Try by ID first, then by slug
-    let sheetApi = await prisma.sheetApi.findUnique({ where: { id: apiId } });
-    if (!sheetApi) {
-      sheetApi = await prisma.sheetApi.findUnique({ where: { slug: apiId } });
-    }
-
+    const sheetApi = await findSheetApiCached(apiId);
     if (!sheetApi) {
       throw new NotFoundError('API not found. Check your API ID or slug.');
     }

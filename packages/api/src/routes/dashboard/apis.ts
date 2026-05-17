@@ -7,6 +7,7 @@ import { NotFoundError, ValidationError, AppError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
+import { invalidateSheetApiCache } from '../../services/sheet-api-cache.service.js';
 
 const slugRegex = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
 
@@ -143,6 +144,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       data: parsed.data,
     });
 
+    // Pass the old slug in case the rename left a stale cache key.
+    await invalidateSheetApiCache(api, existing.slug);
+
     return { api };
   });
 
@@ -190,6 +194,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       );
     }
 
+    await invalidateSheetApiCache(existing);
+
     return { deleted: true };
   });
 
@@ -211,6 +217,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       },
     });
 
+    await invalidateSheetApiCache(existing);
+
     return {
       bearerToken: newToken,
       previousTokenValidUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour grace
@@ -230,6 +238,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       where: { id },
       data: { hmacSecret, requireSigning: true },
     });
+
+    await invalidateSheetApiCache(existing);
 
     return { hmacSecret, requireSigning: true };
   });
