@@ -37,9 +37,31 @@ scope the work to a single tab — see [Per-sheet extraction](#per-sheet-extract
 
 For spreadsheets with many tabs or many rows, **always pass `?sheet=<name>`**.
 Each per-sheet request keeps memory bounded to a single tab's worth of records
-regardless of how big the spreadsheet grows. The legacy "all sheets" mode (no
-`?sheet=`) is still supported, but a large enough spreadsheet can run the API
-out of memory.
+regardless of how many tabs the spreadsheet has. The legacy "all sheets" mode
+(no `?sheet=`) is still supported, but a large enough spreadsheet can run the
+API out of memory.
+
+When a single tab is so large that one tab's worth of records doesn't fit in
+memory either (the adapter materialises every row before streaming CSV), use
+`?range=<A1:Z1000>` alongside `?sheet=` to bound memory to a row slice:
+
+```
+GET /api/v1/:apiId/export.csv?target=aprender_sistema&type=review&sheet=Huge&range=A1:Z2000
+GET /api/v1/:apiId/export.csv?target=aprender_sistema&type=review&sheet=Huge&range=A2001:Z4000
+...
+```
+
+`?range=` is honoured on `?envelope=v1[&target=...]`, `/report`, and
+`/export.csv`. It requires `?sheet=<name>` (A1 notation is per-tab); using
+`?range=` without `?sheet=` returns `400 RANGE_REQUIRES_SHEET`.
+
+Memory model summary:
+
+| Query | Memory ceiling | When to use |
+|---|---|---|
+| (no `?sheet=`) | whole spreadsheet | only for small spreadsheets |
+| `?sheet=X` | one tab | most cases |
+| `?sheet=X&range=A1:Z1000` | one slice | when a single tab is too big to fit |
 
 The recommended consumer pattern (the same one the existing Apps Script
 extraction uses, proven in production for years):
@@ -213,6 +235,13 @@ GET /api/v1/my-api/sheets?include=types
 GET /api/v1/my-api?envelope=v1&target=aprender_sistema&sheet=Super
 GET /api/v1/my-api/report?target=aprender_sistema&sheet=Super
 GET /api/v1/my-api/export.csv?target=aprender_sistema&type=agenda_solicitacoes&sheet=Super
+```
+
+Paginated within a tab (for tabs large enough to OOM on their own):
+
+```
+GET /api/v1/my-api/export.csv?target=aprender_sistema&type=review&sheet=Huge&range=A1:Z2000
+GET /api/v1/my-api/export.csv?target=aprender_sistema&type=review&sheet=Huge&range=A2001:Z4000
 ```
 
 All-tabs (only safe for small spreadsheets):
