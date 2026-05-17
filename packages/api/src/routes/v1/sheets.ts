@@ -159,6 +159,19 @@ export async function sheetsRoutes(app: FastifyInstance) {
     // ?envelope=v1 — structured envelope with normalization, validation, hashes.
     // Opt-in only; default response stays a flat array for backward compatibility.
     if (query.envelope === 'v1') {
+      // Target-attached: route through buildTargetEnvelope so range + per-sheet
+      // semantics match /report and /export.csv exactly. Unknown targets are
+      // a client error so consumers fail loudly instead of silently getting
+      // the base envelope.
+      if (query.target) {
+        if (query.target !== APRENDER_TARGET) {
+          throw new AppError(400, 'UNSUPPORTED_TARGET', `Unsupported target: "${query.target}". Available: ${APRENDER_TARGET}.`);
+        }
+        const envelope = await buildTargetEnvelope(sheetApi, userId, query);
+        return { ...envelope, target: buildAprenderSistemaTarget(envelope) };
+      }
+
+      // Plain envelope (no target). Keeps existing per-sheet behaviour.
       const apiName = (sheetApi as any).name || sheetApi.id;
       let envelope;
       if (sheetName) {
@@ -180,16 +193,6 @@ export async function sheetsRoutes(app: FastifyInstance) {
             rows: rowsFromValues(values),
           })),
         });
-      }
-
-      // ?target=<name> attaches a target-shaped projection to the envelope.
-      // Unknown targets are a client error so consumers fail loudly instead
-      // of silently getting the base envelope.
-      if (query.target) {
-        if (query.target !== APRENDER_TARGET) {
-          throw new AppError(400, 'UNSUPPORTED_TARGET', `Unsupported target: "${query.target}". Available: ${APRENDER_TARGET}.`);
-        }
-        return { ...envelope, target: buildAprenderSistemaTarget(envelope) };
       }
 
       return envelope;
@@ -260,11 +263,19 @@ export async function sheetsRoutes(app: FastifyInstance) {
     return { sheets: names };
   });
 
-  // Shared envelope builder for /report and /export.csv. When ?sheet=<name> is
-  // present we fetch and process that one tab only — bounds memory per request
-  // regardless of how big the spreadsheet grows. Without it we fall back to
-  // the legacy "all sheets" behaviour (kept for backward compat; documented as
-  // for small spreadsheets only).
+  // Shared envelope builder for /report and /export.csv.
+  //
+  // Memory model:
+  //   - ?sheet=<name>           → fetch only that tab. Bounds memory to one tab.
+  //   - ?sheet=<name>&range=A1:Z1000 → fetch only that A1 slice of that tab.
+  //                              Bounds memory to the slice — the only path
+  //                              that survives an aba large enough to OOM
+  //                              by itself.
+  //   - (neither)                → fetch every tab. Backward compatible but
+  //                              fine only for small spreadsheets; documented
+  //                              as such.
+  // ?range= without ?sheet= is rejected: A1 notation is per-tab, mixing it
+  // with the all-sheets fallback would be ambiguous.
   async function buildTargetEnvelope(
     sheetApi: SheetApiRecord,
     userId: string,
@@ -273,9 +284,22 @@ export async function sheetsRoutes(app: FastifyInstance) {
     const apiName = (sheetApi as any).name || sheetApi.id;
     const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
     const sheetName = query.sheet;
+    let range: string | undefined;
+    try {
+      range = sanitizeRange(query.range);
+    } catch (err) {
+      throw new ValidationError((err as Error).message);
+    }
+    if (range && !sheetName) {
+      throw new AppError(
+        400,
+        'RANGE_REQUIRES_SHEET',
+        'When ?range= is provided, ?sheet=<name> is also required (A1 notation is per-tab).',
+      );
+    }
     if (sheetName) {
       const values = await sheetsService.getRawValues(
-        userId, spreadsheetId, sheetName, undefined, sheetApi.cacheTtlSeconds,
+        userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
       );
       return buildEnvelope({
         apiId: sheetApi.id,
