@@ -22,8 +22,16 @@ export function detectType(headers: string[]): SheetType {
 
   if (hasAll(keys, ['CPF', 'CARGO', 'EMAIL'])) return 'users';
 
+  // Produtos: PRODUTO + MUNICIPIO + a quantity column + any identifier.
+  // The historical identifier in the original sheets was "F", but real-world
+  // sheets (e.g. the Controle workbook's purchase tab) use "id" or "CÓDIGO"
+  // for the same role. RowAccessor.get already accepts ID alongside F/CODIGO
+  // on the normalizer side, so this stays consistent end-to-end.
+  const hasProdutoIdentifier =
+    keys.has('F') || keys.has('ID') || keys.has('CODIGO');
   if (
-    hasAll(keys, ['F', 'PRODUTO', 'MUNICIPIO']) &&
+    hasProdutoIdentifier &&
+    hasAll(keys, ['PRODUTO', 'MUNICIPIO']) &&
     (keys.has('QUANT.') || keys.has('QUANT') || keys.has('QUANTIDADE'))
   ) {
     return 'produtos';

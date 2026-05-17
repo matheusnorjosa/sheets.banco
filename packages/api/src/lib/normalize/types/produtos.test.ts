@@ -51,4 +51,17 @@ describe('normalizeProdutoRow', () => {
     });
     expect(normalized.quantidade).toBe(1234);
   });
+
+  it('accepts "id" header as the código identifier (Controle 🟥 COMPRAS)', () => {
+    const { normalized, validation } = normalizeProdutoRow({
+      id: 'X-001',
+      Produto: 'PRODUTO TESTE',
+      'Quant.': '10',
+      'Município': 'Fortaleza',
+      UF: 'CE',
+      Data: '01/01/2026',
+    });
+    expect(normalized.codigo_original).toBe('X-001');
+    expect(validation.status).toBe('valid');
+  });
 });

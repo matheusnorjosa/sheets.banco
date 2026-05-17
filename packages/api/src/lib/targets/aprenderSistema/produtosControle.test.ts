@@ -50,4 +50,28 @@ describe('aprender_sistema target — produtos_controle', () => {
     if (r.target_type !== 'produtos_controle') throw new Error('type narrow');
     expect(r.uso_das_colecoes).toBe('NAO');
   });
+
+  // End-to-end coverage for the Controle 🟥 COMPRAS shape (id column instead
+  // of F). Proves detection + normalizer + target adapter all carry the id
+  // through to target.codigo so the produtos_controle CSV ends up with CÓD
+  // filled in for that sheet.
+  it('detects and adapts Controle 🟥 COMPRAS shape (id-based)', () => {
+    const comprasRow = {
+      id: 'C-001',
+      Produto: 'PRODUTO COMPRAS',
+      'Quant.': '5',
+      'Município': 'Recife',
+      UF: 'PE',
+      Data: '15/03/2026',
+      'Uso das coleções': 'SIM',
+    };
+    const env = envelopeOf('🟥 COMPRAS', [comprasRow]);
+    const t = buildAprenderSistemaTarget(env);
+    const r = t.records[0];
+    expect(r.target_type).toBe('produtos_controle');
+    if (r.target_type !== 'produtos_controle') throw new Error('type narrow');
+    expect(r.codigo).toBe('C-001');
+    expect(r.produto).toBe('PRODUTO COMPRAS');
+    expect(r.quantidade).toBe(5);
+  });
 });
