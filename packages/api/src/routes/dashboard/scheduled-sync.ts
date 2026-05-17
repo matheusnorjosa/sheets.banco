@@ -5,6 +5,7 @@ import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import { updateSyncSchedule, removeSyncSchedule } from '../../queues/scheduled-sync.queue.js';
+import { invalidateSheetApiCache } from '../../services/sheet-api-cache.service.js';
 
 const cronRegex = /^(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)$/;
 
@@ -61,6 +62,8 @@ export async function scheduledSyncRoutes(app: FastifyInstance) {
         syncCron: syncCron !== undefined ? syncCron : undefined,
       },
     });
+
+    await invalidateSheetApiCache(api);
 
     // Update or remove the repeatable job
     if (api.syncEnabled && api.syncCron) {
