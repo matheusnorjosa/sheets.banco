@@ -9,7 +9,7 @@ destination system, calls external APIs, or persists state in a database.
 
 ## Surfaces
 
-There are five HTTP shapes available on top of the same `:apiId` resource.
+There are six HTTP shapes available on top of the same `:apiId` resource.
 They are listed in increasing level of opinion:
 
 | URL | Shape | Stability |
@@ -19,6 +19,7 @@ They are listed in increasing level of opinion:
 | `GET /api/v1/:apiId?envelope=v1&target=aprender_sistema` | Envelope **+ `target` field** | Stable v1 |
 | `GET /api/v1/:apiId/report?target=aprender_sistema` | Aggregated counts (no PII) | Stable v1 |
 | `GET /api/v1/:apiId/export.csv?target=aprender_sistema&type=<type>` | CSV per export type (streamed) | Stable v1 |
+| `GET /api/v1/:apiId/workbook.json?sheet=<name>` | Raw per-sheet snapshot for staging imports | Stable v1 |
 
 All four of the envelope/target/report/CSV surfaces accept `?sheet=<name>` to
 scope the work to a single tab — see [Per-sheet extraction](#per-sheet-extraction).
@@ -226,6 +227,81 @@ stay in their exportable type and carry the issue codes through to the CSV.
 The adapter is a stateless transform. The destination system or a future PR
 can layer any of the above on top of these CSVs / envelopes.
 
+## Workbook snapshot — raw per-sheet export for staging
+
+For when the consumer needs the **raw cell data** of a tab (not the target
+projection), use:
+
+```
+GET /api/v1/:apiId/workbook.json?sheet=<tab name>
+```
+
+`?sheet=` is required. There is no full-workbook variant: the smoke against
+the Controle workbook showed that a single all-sheets response reliably OOMs
+the Render instance. Per-sheet keeps memory bounded.
+
+Response shape:
+
+```json
+{
+  "api_id": "<id>",
+  "exported_at": "2026-05-18T...",
+  "sheet": {
+    "sheet_index": 0,
+    "sheet_name": "🟥 COMPRAS",
+    "detected_type": "produtos",
+    "headers": ["id", "Produto", "Quant.", "..."],
+    "row_count": 1978,
+    "rows": [
+      {
+        "row_number": 2,
+        "values": { "id": "<v>", "Produto": "<v>", "...": "<v>" },
+        "raw": ["<v>", "<v>", "..."]
+      }
+    ]
+  }
+}
+```
+
+Key contract details:
+
+- **`headers`** is exactly what the spreadsheet returned for the first row of
+  the range (or row 1 when no range is given). It is **not** mutated for
+  empty/duplicate columns.
+- **`values`** uses safe keys derived from `headers`:
+  - Empty/blank header → `__col_<1-based index>` (e.g. `__col_3`).
+  - Duplicate header → first stays as-is, subsequent get `__2`, `__3` suffixes
+    (e.g. `Produto`, `Produto__2`, `Produto__3`).
+- **`raw`** is an array of values in column order — always mirrors the headers
+  array length; useful when you need positional access regardless of header
+  text.
+- **`row_number`** is the spreadsheet row number (1-based; header is row 1
+  unless `?range=` anchors elsewhere). Rows whose every cell is empty are
+  dropped, but `row_number` always points back to the spreadsheet — so gaps
+  in the sequence indicate dropped empty rows.
+- **`detected_type`** comes from `detectType` over `headers`. Tabs with
+  unknown shapes are **included** in the export with `detected_type: "unknown"`
+  — workbook.json never filters tabs by type.
+- **`?range=A1:Z1000`** is accepted and forwarded to the same slicing used
+  by `/report` / `/export.csv` (PR 9E). When the range does not include the
+  spreadsheet's real header row, `headers` and `detected_type` are derived
+  from the first row IN the range — paginate by row offset only if you
+  understand this.
+- **OOB range** (e.g. `A999999:Z999999`) returns `200` with
+  `row_count: 0` and `rows: []`, same contract as the rest of the heavy
+  surfaces post Issue #20.
+
+Consumer pattern:
+
+```
+1. GET /api/v1/:apiId/sheets?include=types
+2. For each tab name N (including unknown):
+     GET /api/v1/:apiId/workbook.json?sheet=N
+```
+
+Full workbook zip / multi-sheet export is **out of scope** for this version
+and lives in a future PR if/when the staging consumer needs it.
+
 ## Example URLs
 
 Single-tab (recommended for any spreadsheet that might grow):
@@ -235,6 +311,7 @@ GET /api/v1/my-api/sheets?include=types
 GET /api/v1/my-api?envelope=v1&target=aprender_sistema&sheet=Super
 GET /api/v1/my-api/report?target=aprender_sistema&sheet=Super
 GET /api/v1/my-api/export.csv?target=aprender_sistema&type=agenda_solicitacoes&sheet=Super
+GET /api/v1/my-api/workbook.json?sheet=Super
 ```
 
 Paginated within a tab (for tabs large enough to OOM on their own):
