@@ -15,6 +15,10 @@ import {
   validateCsvExportQuery,
 } from '../../lib/targets/aprenderSistema/csv.js';
 import { findSheetApiCached } from '../../services/sheet-api-cache.service.js';
+import {
+  buildWorkbookSheetSnapshot,
+  validateWorkbookQuery,
+} from '../../lib/workbook/snapshot.js';
 import { apiAuth } from '../../middleware/api-auth.js';
 import { apiCors } from '../../middleware/cors.js';
 import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
@@ -363,6 +367,50 @@ export async function sheetsRoutes(app: FastifyInstance) {
     reply.header('Content-Type', 'text/csv; charset=utf-8');
     reply.header('Content-Disposition', `attachment; filename="${buildCsvFilename(exportType, sheetApi.id)}"`);
     return reply.send(streamTargetCsv(target, exportType));
+  });
+
+  // GET /:apiId/workbook.json — per-sheet workbook snapshot for staging
+  // imports. Opt-in, ?sheet=<name> REQUIRED (full-workbook in one call would
+  // OOM on big spreadsheets — see PR 9C smoke). Optional ?range= forwards
+  // to the existing getRawValues slicing.
+  //
+  // Headers: when ?range= skips the spreadsheet's real header row, the
+  // returned `headers` come from the first row IN the range, and
+  // `detected_type` follows from those. Document yourself before paginating
+  // by row offset.
+  app.get('/:apiId/workbook.json', async (request) => {
+    const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
+    const query = getQueryParams(request);
+
+    const validated = validateWorkbookQuery({ sheet: query.sheet, range: query.range });
+    if (!validated.ok) {
+      throw new AppError(400, validated.code, validated.message);
+    }
+    const { sheet: sheetName, range } = validated;
+
+    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    const names = await sheetsService.listSheetNames(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
+    const sheetIndex = names.indexOf(sheetName);
+    if (sheetIndex < 0) {
+      throw new NotFoundError(`Sheet "${sheetName}" not found in this spreadsheet.`);
+    }
+
+    const values = await sheetsService.getRawValues(
+      userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
+    );
+    const snapshot = buildWorkbookSheetSnapshot({
+      sheet_index: sheetIndex,
+      sheet_name: sheetName,
+      values,
+      range,
+    });
+
+    return {
+      api_id: sheetApi.id,
+      exported_at: new Date().toISOString(),
+      sheet: snapshot,
+    };
   });
 
   // GET /:apiId/keys — return column names
