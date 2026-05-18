@@ -3,7 +3,7 @@ import { NotFoundError, SheetAccessError, AppError } from '../lib/errors.js';
 import { processSpecialValues } from '../utils/special-values.js';
 import * as cache from './cache.service.js';
 import { getOAuthClient } from './oauth-pool.service.js';
-import { buildSheetsWithTypes, type SheetWithType } from '../lib/detect/index.js';
+import { buildSheetsWithTypes, type SheetMetadata, type SheetWithType } from '../lib/detect/index.js';
 import { withBackoff } from './google-backoff.js';
 import type { RenderOptions } from '../utils/layout.js';
 
@@ -204,6 +204,7 @@ export async function invalidateCache(spreadsheetId: string): Promise<void> {
   await cache.invalidate(`allRaw:${spreadsheetId}`);
   await cache.invalidate(`sheetList:${spreadsheetId}`);
   await cache.invalidate(`sheetListTyped:${spreadsheetId}`);
+  await cache.invalidate(`sheetMeta:${spreadsheetId}`);
 }
 
 /**
@@ -243,6 +244,72 @@ export async function listSheetNames(
 }
 
 /**
+ * List visible tabs with their structured metadata (title + numeric sheetId
+ * + index). Cached so callers that need stable identifiers (rename-safe
+ * cache keys, /sheets?include=types, ?sheetId= resolution) don't pay extra
+ * round-trips to Google.
+ *
+ * Excludes hidden tabs (same policy as listSheetNames — PR #25).
+ */
+export async function listSheetMetadata(
+  userId: string,
+  spreadsheetId: string,
+  cacheTtl = 300,
+): Promise<SheetMetadata[]> {
+  const cacheKey = `sheetMeta:${spreadsheetId}`;
+  const cached = await cache.get<SheetMetadata[]>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const sheets = await getSheetsClient(userId);
+    const response = await withBackoff(() => sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties(title,hidden,sheetId,index)',
+    }));
+    const meta: SheetMetadata[] = (response.data.sheets ?? [])
+      .filter((s) => !s.properties?.hidden)
+      .map((s) => ({
+        name: typeof s.properties?.title === 'string' ? s.properties.title : '',
+        sheet_id: typeof s.properties?.sheetId === 'number' ? s.properties.sheetId : null,
+        sheet_index: typeof s.properties?.index === 'number' ? s.properties.index : 0,
+      }))
+      .filter((m) => m.name.length > 0);
+    await cache.set(cacheKey, meta, cacheTtl);
+    return meta;
+  } catch (error) {
+    return handleSheetError(error);
+  }
+}
+
+/**
+ * Resolve a tab from a query object that may have ?sheet=<name> and/or
+ * ?sheetId=<numeric>. When both are present, sheetId wins (stable identifier
+ * survives renames). Returns null when neither resolves to a real visible
+ * tab. Hidden tabs are filtered (PR #25 policy preserved).
+ *
+ * Used by route handlers to enable consumers to pin to a numeric sheetId
+ * in their configs without losing the existing name-based API.
+ */
+export async function resolveTabByIdOrName(
+  userId: string,
+  spreadsheetId: string,
+  q: { sheet?: string; sheetId?: string },
+  cacheTtl = 300,
+): Promise<string | null> {
+  if (q.sheetId !== undefined && q.sheetId !== '') {
+    const id = Number(q.sheetId);
+    if (!Number.isInteger(id)) {
+      throw new AppError(400, 'INVALID_SHEET_ID', `?sheetId must be an integer, got "${q.sheetId}".`);
+    }
+    const meta = await listSheetMetadata(userId, spreadsheetId, cacheTtl);
+    const match = meta.find((m) => m.sheet_id === id);
+    return match ? match.name : null;
+  }
+  if (q.sheet) return q.sheet;
+  return null;
+}
+
+/**
  * List all tabs with their detected target type. Fetches only the first row
  * of each tab (one batched call) so the consumer can plan per-sheet extraction
  * without paying for cell data first.
@@ -257,24 +324,26 @@ export async function listSheetsWithTypes(
   if (cached) return cached;
 
   try {
-    const names = await listSheetNames(userId, spreadsheetId, cacheTtl);
-    if (names.length === 0) {
+    // We need sheetId + index here for the typed manifest, so call the metadata
+    // helper directly instead of listSheetNames (which only returns names).
+    const meta = await listSheetMetadata(userId, spreadsheetId, cacheTtl);
+    if (meta.length === 0) {
       await cache.set(cacheKey, [], cacheTtl);
       return [];
     }
     const sheets = await getSheetsClient(userId);
     // A1 notation: double single quotes inside the tab name.
-    const ranges = names.map((n) => `'${n.replace(/'/g, "''")}'!1:1`);
+    const ranges = meta.map((m) => `'${m.name.replace(/'/g, "''")}'!1:1`);
     const response = await withBackoff(() => sheets.spreadsheets.values.batchGet({
       spreadsheetId,
       ranges,
     }));
     const valueRanges = response.data.valueRanges ?? [];
-    const headersByIndex = names.map((_, i) => {
+    const headersByIndex = meta.map((_, i) => {
       const firstRow = valueRanges[i]?.values?.[0];
       return Array.isArray(firstRow) ? (firstRow as string[]) : [];
     });
-    const result = buildSheetsWithTypes(names, headersByIndex);
+    const result = buildSheetsWithTypes(meta, headersByIndex);
     await cache.set(cacheKey, result, cacheTtl);
     return result;
   } catch (error) {
