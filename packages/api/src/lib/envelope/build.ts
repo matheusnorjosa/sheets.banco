@@ -63,18 +63,28 @@ export interface SheetInput {
 }
 
 /**
- * Convert a 2D string matrix into row objects keyed by the first row's headers.
+ * Convert a 2D string matrix into row objects keyed by the header row.
  * Empty header cells produce keys like "col_3" so values are still accessible
  * via /export and remain visible in `raw`.
+ *
+ * `headerIndex` is the 0-based matrix index of the header row. Defaults to 0
+ * (today's behaviour). For ?headerRow=N with ?range=A_S:..., the route layer
+ * passes `N - S` so banner rows above the real header are dropped.
+ *
+ * Returns empty array when:
+ *   - values is empty or undefined
+ *   - headerIndex is out of bounds
+ *   - there are no data rows after the header (header-only sheet)
  */
-export function rowsFromValues(values: string[][]): RawRow[] {
-  if (!values || values.length < 2) return [];
-  const headers = (values[0] ?? []).map((h, i) => {
+export function rowsFromValues(values: string[][], headerIndex = 0): RawRow[] {
+  if (!values || values.length === 0) return [];
+  if (headerIndex < 0 || headerIndex >= values.length) return [];
+  const headers = (values[headerIndex] ?? []).map((h, i) => {
     const trimmed = String(h ?? '').trim();
     return trimmed || `col_${i + 1}`;
   });
   const out: RawRow[] = [];
-  for (let r = 1; r < values.length; r++) {
+  for (let r = headerIndex + 1; r < values.length; r++) {
     const row = values[r] ?? [];
     const obj: RawRow = {};
     for (let c = 0; c < headers.length; c++) {

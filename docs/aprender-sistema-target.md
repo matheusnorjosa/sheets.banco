@@ -34,6 +34,29 @@ scope the work to a single tab — see [Per-sheet extraction](#per-sheet-extract
 - `?sheet=<name>` is opt-in. Without it, the heavy surfaces still process
   every tab — fine for small spreadsheets, risky for big ones.
 
+## Header offset — `?headerRow=N`
+
+Spreadsheets often have banner rows, totals, or matrix layouts that push
+the real header below row 1. Pass `?headerRow=<1-based row index>` and
+the heavy endpoints will treat that row as the header and drop everything
+above:
+
+```
+GET /api/v1/:apiId?sheet=Mensal&headerRow=5
+GET /api/v1/:apiId?envelope=v1&sheet=Mensal&headerRow=5
+GET /api/v1/:apiId/workbook.json?sheet=Mensal&headerRow=5
+```
+
+Combines with `?range=`: the row index is always relative to the
+spreadsheet, not the range. `?range=A1:Z100&headerRow=5` fetches the
+slice and uses row 5 inside it. If `headerRow` falls outside the fetched
+range, the endpoint returns `400 HEADER_ROW_OUTSIDE_RANGE`. Default
+behaviour (no param) is unchanged.
+
+Not honored on the target adapter paths
+(`?target=aprender_sistema`, `/report`, `/export.csv`) — those expect a
+header on row 1 by design.
+
 ## Value rendering — `?render=` and `?dateTime=`
 
 Two opt-in params forward directly to Google's `valueRenderOption` and

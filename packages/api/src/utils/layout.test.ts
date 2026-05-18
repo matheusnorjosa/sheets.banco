@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeRange, isLayout, applyLayout, parseRenderOptions } from './layout.js';
+import {
+  sanitizeRange,
+  isLayout,
+  applyLayout,
+  parseRenderOptions,
+  parseHeaderRow,
+} from './layout.js';
 
 describe('sanitizeRange', () => {
   it('accepts standard A1 ranges', () => {
@@ -74,6 +80,29 @@ describe('parseRenderOptions', () => {
 
   it('throws on unknown dateTime', () => {
     expect(() => parseRenderOptions(undefined, 'iso')).toThrow(/Invalid dateTime option/);
+  });
+});
+
+describe('parseHeaderRow', () => {
+  it('returns undefined when the param is absent or empty', () => {
+    expect(parseHeaderRow(undefined)).toBeUndefined();
+    expect(parseHeaderRow('')).toBeUndefined();
+  });
+
+  it('returns the parsed positive integer', () => {
+    expect(parseHeaderRow('1')).toBe(1);
+    expect(parseHeaderRow('5')).toBe(5);
+    expect(parseHeaderRow('100')).toBe(100);
+  });
+
+  it('throws on zero or negative', () => {
+    expect(() => parseHeaderRow('0')).toThrow(/positive integer/);
+    expect(() => parseHeaderRow('-1')).toThrow(/positive integer/);
+  });
+
+  it('throws on non-integer', () => {
+    expect(() => parseHeaderRow('1.5')).toThrow(/positive integer/);
+    expect(() => parseHeaderRow('foo')).toThrow(/positive integer/);
   });
 });
 
