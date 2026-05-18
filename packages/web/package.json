@@ -17,10 +17,10 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^25",
+    "@types/node": "^25.9.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^10",
+    "eslint": "^10.4.0",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "typescript": "^6"
