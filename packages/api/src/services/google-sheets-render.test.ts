@@ -16,6 +16,7 @@ const valuesGetMock = vi.fn();
 
 vi.mock('googleapis', () => ({
   google: {
+    options: vi.fn(),
     sheets: () => ({
       spreadsheets: {
         get: spreadsheetsGetMock,
