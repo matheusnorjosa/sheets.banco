@@ -49,6 +49,26 @@ function handleSheetError(error: unknown): never {
   throw error;
 }
 
+/**
+ * Predicate: did Google Sheets reject this call because the A1 range points
+ * past the actual grid (e.g., A999999:Z999999 on a tab with 100 rows)?
+ *
+ * The library surfaces this as an HTTP-400 error with a message like
+ *   "Range ('Tab'!A999999:Z999999) exceeds grid limits. Max rows: N, max columns: M"
+ *
+ * Catching it lets the heavy paths return an empty slice instead of a 500.
+ * Deliberately narrow — we only short-circuit on this exact failure mode; any
+ * other 400 (malformed range that slipped past sanitizeRange, auth errors,
+ * etc.) keeps its current behaviour so we don't mask real problems.
+ */
+export function isRangeOutOfBoundsError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as { code?: unknown }).code;
+  if (code !== 400) return false;
+  const message = String((error as { message?: unknown }).message ?? '');
+  return /exceeds grid limits/i.test(message);
+}
+
 export async function getRows(
   userId: string,
   spreadsheetId: string,
@@ -190,6 +210,13 @@ export async function getRawValues(
     await cache.set(cacheKey, values, cacheTtl);
     return values;
   } catch (error) {
+    // Out-of-bounds range with an explicit ?range= → treat as empty slice.
+    // Caching prevents repeated hits to Google for the same OOB range while
+    // the spreadsheet hasn't changed (invalidated normally on writes).
+    if (range && isRangeOutOfBoundsError(error)) {
+      await cache.set(cacheKey, [], cacheTtl);
+      return [];
+    }
     return handleSheetError(error);
   }
 }
