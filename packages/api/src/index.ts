@@ -91,6 +91,7 @@ app.setErrorHandler((error: Error, request, reply) => {
       message: error.message,
       code: error.code,
       statusCode: error.statusCode,
+      ...(error.details && { details: error.details }),
     });
   }
 
