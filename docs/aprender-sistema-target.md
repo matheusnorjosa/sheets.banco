@@ -34,6 +34,19 @@ scope the work to a single tab — see [Per-sheet extraction](#per-sheet-extract
 - `?sheet=<name>` is opt-in. Without it, the heavy surfaces still process
   every tab — fine for small spreadsheets, risky for big ones.
 
+## Hidden Google Sheets tabs
+
+Hidden Google Sheets tabs (`properties.hidden === true`) are intentionally
+excluded from public API outputs. They are not listed in `/sheets` or
+`/sheets?include=types` and cannot be exported through `/workbook.json` —
+requests targeting a hidden tab by name return a generic `404`. The legacy
+`GET /api/v1/:apiId` without `?sheet=` also picks the first **visible** tab
+as the default. Hide a tab in the Google Sheets UI to make it disappear
+from the API surface.
+
+Cache TTL means hide/unhide operations can take up to ~5 minutes to
+reflect in API responses; that trade-off keeps reads cheap.
+
 ## Per-sheet extraction
 
 For spreadsheets with many tabs or many rows, **always pass `?sheet=<name>`**.

@@ -17,7 +17,10 @@ async function getSheetsClient(userId: string): Promise<sheets_v4.Sheets> {
 }
 
 /**
- * Resolve the sheet tab name. If not provided, fetches the first tab name.
+ * Resolve the sheet tab name. If not provided, fetches the first VISIBLE tab
+ * name — hidden tabs are skipped intentionally so the API never surfaces a
+ * hidden default. Issue #20 / hidden-sheets policy: hidden tabs do not exist
+ * for consumers of this API.
  */
 async function resolveSheetName(userId: string, spreadsheetId: string, sheetName?: string): Promise<string> {
   if (sheetName) return sheetName;
@@ -29,10 +32,12 @@ async function resolveSheetName(userId: string, spreadsheetId: string, sheetName
   const sheets = await getSheetsClient(userId);
   const response = await sheets.spreadsheets.get({
     spreadsheetId,
-    fields: 'sheets.properties.title',
+    fields: 'sheets.properties(title,hidden)',
   });
-  const firstSheet = response.data.sheets?.[0]?.properties?.title;
-  if (!firstSheet) throw new NotFoundError('Spreadsheet has no sheets.');
+  const firstSheet = (response.data.sheets ?? [])
+    .find((s) => !s.properties?.hidden)
+    ?.properties?.title;
+  if (!firstSheet) throw new NotFoundError('Spreadsheet has no visible sheets.');
 
   await cache.set(cacheKey, firstSheet, 300);
   return firstSheet;
@@ -116,7 +121,14 @@ export async function invalidateCache(spreadsheetId: string): Promise<void> {
 }
 
 /**
- * List all tab names in the spreadsheet.
+ * List all VISIBLE tab names in the spreadsheet. Tabs with
+ * `properties.hidden === true` are excluded by design — they don't exist as
+ * far as this API's consumers are concerned. Downstream (workbook.json,
+ * /report, /export.csv, envelope all-sheets, legacy default) all inherit
+ * this filter because they go through listSheetNames.
+ *
+ * Cache TTL means hide/unhide operations can take up to ~5 minutes to
+ * reflect; that trade-off is acceptable vs. blowing the cache on every read.
  */
 export async function listSheetNames(
   userId: string,
@@ -131,9 +143,10 @@ export async function listSheetNames(
     const sheets = await getSheetsClient(userId);
     const response = await sheets.spreadsheets.get({
       spreadsheetId,
-      fields: 'sheets.properties.title',
+      fields: 'sheets.properties(title,hidden)',
     });
     const names = (response.data.sheets ?? [])
+      .filter((s) => !s.properties?.hidden)
       .map((s) => s.properties?.title)
       .filter((n): n is string => typeof n === 'string');
     await cache.set(cacheKey, names, cacheTtl);
