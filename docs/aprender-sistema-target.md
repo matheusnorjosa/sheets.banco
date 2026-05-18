@@ -34,6 +34,27 @@ scope the work to a single tab — see [Per-sheet extraction](#per-sheet-extract
 - `?sheet=<name>` is opt-in. Without it, the heavy surfaces still process
   every tab — fine for small spreadsheets, risky for big ones.
 
+## Value rendering — `?render=` and `?dateTime=`
+
+Two opt-in params forward directly to Google's `valueRenderOption` and
+`dateTimeRenderOption`, letting consumers choose how cell values are
+serialised:
+
+| Query | Maps to | Meaning |
+|---|---|---|
+| `?render=formatted` | `FORMATTED_VALUE` | strings the user sees (default) |
+| `?render=unformatted` | `UNFORMATTED_VALUE` | raw types — numbers as numbers, booleans as booleans |
+| `?render=formula` | `FORMULA` | formula text when present, else the value |
+| `?dateTime=serial` | `SERIAL_NUMBER` | Excel-style serial date |
+| `?dateTime=string` | `FORMATTED_STRING` | user-visible date string |
+
+Honored on `GET /:apiId` (legacy), `GET /:apiId?envelope=v1`, and
+`GET /:apiId/workbook.json`. **Not** honored on the target adapter paths
+(`?target=aprender_sistema`, `/report`, `/export.csv`) — those have their
+own normalization layer and need formatted strings.
+
+Default (no param) preserves the previous behaviour exactly.
+
 ## Hidden Google Sheets tabs
 
 Hidden Google Sheets tabs (`properties.hidden === true`) are intentionally
