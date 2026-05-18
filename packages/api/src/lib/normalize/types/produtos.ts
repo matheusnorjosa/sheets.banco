@@ -24,7 +24,10 @@ export function normalizeProdutoRow(row: RawRow): {
 } {
   const r = new RowAccessor(row);
 
-  const codigo_original = trimAll(r.get('F', 'Código', 'Codigo'));
+  // Real-world identifiers seen so far: "F" (original), "id" (Controle 🟥 COMPRAS),
+  // "Código"/"Codigo". RowAccessor.get is case- and accent-insensitive, so any
+  // casing of these is matched.
+  const codigo_original = trimAll(r.get('F', 'ID', 'Código', 'Codigo'));
   const produto_original = collapseSpaces(trimAll(r.get('Produto')));
   const produto_key = produto_original
     ? removeAccents(produto_original).toUpperCase().replace(/[.;,]/g, '').replace(/\s+/g, ' ').trim()

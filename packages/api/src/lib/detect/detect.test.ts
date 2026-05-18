@@ -6,8 +6,28 @@ describe('detectType', () => {
     expect(detectType(['Nome', 'Nome Completo', 'CPF', 'Telefone', 'Email', 'Cargo', 'Gerência'])).toBe('users');
   });
 
-  it('detects produtos', () => {
+  it('detects produtos with F identifier (original sheets)', () => {
     expect(detectType(['F', 'Produto', 'Quant.', 'Município', 'UF', 'Data', 'Uso das coleções'])).toBe('produtos');
+  });
+
+  it('detects produtos with id identifier (Controle 🟥 COMPRAS shape)', () => {
+    expect(detectType(['id', 'Produto', 'Quant.', 'Município', 'UF', 'Data', 'Uso das coleções'])).toBe('produtos');
+  });
+
+  it('detects produtos with Código identifier (accent variant)', () => {
+    expect(detectType(['Código', 'Produto', 'Quant.', 'Município', 'UF', 'Data'])).toBe('produtos');
+  });
+
+  it('detects produtos with CODIGO identifier (uppercase ascii variant)', () => {
+    expect(detectType(['CODIGO', 'Produto', 'Quant.', 'Município', 'UF', 'Data'])).toBe('produtos');
+  });
+
+  it('does NOT detect produtos when no identifier column is present', () => {
+    expect(detectType(['Produto', 'Quant.', 'Município', 'UF', 'Data'])).toBe('unknown');
+  });
+
+  it('does NOT detect produtos when the quantity column is missing', () => {
+    expect(detectType(['id', 'Produto', 'Município', 'UF', 'Data'])).toBe('unknown');
   });
 
   it('detects agenda (spec original com Coordenador)', () => {
