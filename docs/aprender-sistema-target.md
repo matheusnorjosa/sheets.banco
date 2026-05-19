@@ -133,11 +133,11 @@ diagnosis.
 Tabs observed in the wild that need `?headerRow=` or `?range=` to read
 cleanly:
 
-| Workbook | Tab | Symptom without hint | Likely fix |
+| Workbook | Tab | Symptom without hint | Known-working hint |
 |---|---|---|---|
-| Disponibilidade | `MENSAL` | `row_count=0` (envelope/workbook); legacy returns `[{},{},...]`. | `?range=A5:Z` (known-working). |
-| Controle | `ℹ️ FORMAÇÕES` | Single header `"0"`, all rows truncated to width 1. Indicates row 1 has only column A populated; the real header lives below a banner. | Probe with `?range=A1:Z20` then `A3:AZ30`, `A5:AZ40`, `A10:AZ60` to find the header row, then pin via `?headerRow=N` or `?range=A<N>:AZ`. |
-| Controle | `ℹ️ DAT` | Header row 1 reads with 21 columns but 2 leading empties + visual `⬆️` separators + duplicate `Obs` at the end. Density ~71% — many cells are structurally blank. | The header IS on row 1, but the layout has visual gap and separator columns. Either pin `?range=` to the data columns (e.g. `C1:U`) or accept the blanks and let the consumer ignore `__col_*` keys (see `buildValueKeys` for the renaming rule). |
+| Disponibilidade | `MENSAL` | `row_count=0` (envelope/workbook); legacy returns `[{},{},...]`. | `?range=A5:Z` |
+| Controle | `ℹ️ FORMAÇÕES` | Single header `"0"`, all rows truncated to width 1. Row 1 only has column A populated; the real header is on row 7, with banner rows above. | `?range=A7:AZ` → 385 rows × 50 cols, 17 empty columns are intrinsic section gaps. Same as `?headerRow=7` alone (the API back-calculates from the range; pick whichever reads cleaner in your config). |
+| Controle | `ℹ️ DAT` | Default fetch reads 21 cols with 2 empty leading + visual `⬆️` separators + duplicate `Obs`. Density ~71% because of structural blanks in the visual columns. | `?range=C1:Z` → 937 rows × 19 cols, drops the 2 empty leading columns. Duplicates remain (`⬆️` separators + duplicate `Obs`) — they're inherent to the sheet layout; consumers should ignore the `__col_*` / `Obs__2` keys via `buildValueKeys`. |
 
 The repo ships a metrics-only probe (`packages/api/scripts/probe-sheet.ts`,
 also exposed as `npm run probe:sheet -w packages/api`) to iterate over
