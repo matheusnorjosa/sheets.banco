@@ -1,5 +1,8 @@
 import { detectType, type SheetType } from '../detect/index.js';
-import { sanitizeRange } from '../../utils/layout.js';
+import { parseHeaderRow, parseRangeStartRow, sanitizeRange } from '../../utils/layout.js';
+
+// Re-export for callers that already import parseRangeStartRow from this module.
+export { parseRangeStartRow } from '../../utils/layout.js';
 
 export interface WorkbookRow {
   /** Spreadsheet row number (1-based; header is row 1 unless a range moves it). */
@@ -19,17 +22,6 @@ export interface WorkbookSheetSnapshot {
   /** Count of NON-empty data rows actually emitted in `rows`. */
   row_count: number;
   rows: WorkbookRow[];
-}
-
-/**
- * Parse the starting row number from an A1 range. The first character group
- * may be a column letter sequence (e.g., "A", "AB", or empty). The next group
- * must be a row number; if there is none (e.g., "A:A"), defaults to row 1.
- */
-export function parseRangeStartRow(range: string | undefined): number {
-  if (!range) return 1;
-  const m = range.match(/^[A-Z]*(\d+)/);
-  return m ? parseInt(m[1], 10) : 1;
 }
 
 /**
@@ -59,35 +51,63 @@ export interface BuildSnapshotInput {
   values: string[][];
   /** Original A1 range, if any. Used to anchor row_number. */
   range?: string;
+  /**
+   * 1-based spreadsheet row that holds the header. Defaults to 1 — i.e. the
+   * first row of the fetched range. When the range starts at row R and the
+   * header is at row H, the header is at matrix index H - R; rows above are
+   * banner/title rows and are silently dropped.
+   */
+  header_row?: number;
 }
+
+export type BuildSnapshotResult =
+  | { ok: true; snapshot: WorkbookSheetSnapshot }
+  | { ok: false; code: 'HEADER_ROW_OUTSIDE_RANGE'; message: string };
 
 /**
  * Build the per-sheet workbook snapshot. Pure function — receives already-
  * fetched values plus metadata, returns the contract object. Drops rows
  * whose every cell is the empty string (mirrors envelope.rowsFromValues
  * behaviour for consistency).
+ *
+ * Returns a discriminated result so the route layer can map
+ * HEADER_ROW_OUTSIDE_RANGE to a 400 without this module knowing about HTTP.
  */
-export function buildWorkbookSheetSnapshot(input: BuildSnapshotInput): WorkbookSheetSnapshot {
+export function buildWorkbookSheetSnapshot(input: BuildSnapshotInput): BuildSnapshotResult {
   const { sheet_index, sheet_name, values, range } = input;
   const startRow = parseRangeStartRow(range);
+  const headerRow = input.header_row ?? startRow;
+  const headerIndex = headerRow - startRow;
 
   if (values.length === 0) {
+    // Empty matrix — return a coherent empty snapshot regardless of headerRow.
     return {
-      sheet_index,
-      sheet_name,
-      detected_type: 'unknown',
-      headers: [],
-      row_count: 0,
-      rows: [],
+      ok: true,
+      snapshot: {
+        sheet_index,
+        sheet_name,
+        detected_type: 'unknown',
+        headers: [],
+        row_count: 0,
+        rows: [],
+      },
     };
   }
 
-  const headers = (values[0] ?? []).map((h) => String(h ?? ''));
+  if (headerIndex < 0 || headerIndex >= values.length) {
+    return {
+      ok: false,
+      code: 'HEADER_ROW_OUTSIDE_RANGE',
+      message: `headerRow=${headerRow} is not within the fetched data (covers rows ${startRow}..${startRow + values.length - 1}).`,
+    };
+  }
+
+  const headers = (values[headerIndex] ?? []).map((h) => String(h ?? ''));
   const valueKeys = buildValueKeys(headers);
   const detected_type = detectType(headers);
 
   const rows: WorkbookRow[] = [];
-  for (let i = 1; i < values.length; i++) {
+  for (let i = headerIndex + 1; i < values.length; i++) {
     const row = values[i] ?? [];
     const raw: string[] = [];
     const valuesObj: Record<string, string> = {};
@@ -109,26 +129,29 @@ export function buildWorkbookSheetSnapshot(input: BuildSnapshotInput): WorkbookS
   }
 
   return {
-    sheet_index,
-    sheet_name,
-    detected_type,
-    headers,
-    row_count: rows.length,
-    rows,
+    ok: true,
+    snapshot: {
+      sheet_index,
+      sheet_name,
+      detected_type,
+      headers,
+      row_count: rows.length,
+      rows,
+    },
   };
 }
 
 export type WorkbookQueryValidation =
-  | { ok: true; sheet: string; range: string | undefined }
+  | { ok: true; sheet: string; range: string | undefined; header_row: number | undefined }
   | { ok: false; code: 'WORKBOOK_SHEET_REQUIRED' | 'VALIDATION_ERROR'; message: string };
 
 /**
  * Validate the per-sheet workbook export query. `sheet` is required; `range`
- * is optional and goes through the shared sanitizeRange validator.
+ * and `headerRow` are optional and go through the shared validators.
  * Returned as a discriminated union so the HTTP layer maps failures onto
  * AppError without this module knowing about Fastify.
  */
-export function validateWorkbookQuery(query: { sheet?: string; range?: string }): WorkbookQueryValidation {
+export function validateWorkbookQuery(query: { sheet?: string; range?: string; headerRow?: string }): WorkbookQueryValidation {
   if (!query.sheet) {
     return {
       ok: false,
@@ -136,10 +159,17 @@ export function validateWorkbookQuery(query: { sheet?: string; range?: string })
       message: 'Missing sheet. Workbook export is per-sheet only — pass ?sheet=<tab name>. Use /sheets?include=types to list available tabs.',
     };
   }
+  let range: string | undefined;
+  let header_row: number | undefined;
   try {
-    const range = sanitizeRange(query.range);
-    return { ok: true, sheet: query.sheet, range };
+    range = sanitizeRange(query.range);
   } catch (err) {
     return { ok: false, code: 'VALIDATION_ERROR', message: (err as Error).message };
   }
+  try {
+    header_row = parseHeaderRow(query.headerRow);
+  } catch (err) {
+    return { ok: false, code: 'VALIDATION_ERROR', message: (err as Error).message };
+  }
+  return { ok: true, sheet: query.sheet, range, header_row };
 }

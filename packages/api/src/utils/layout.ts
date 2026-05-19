@@ -87,6 +87,34 @@ export interface RenderOptions {
   dateTimeRenderOption?: 'SERIAL_NUMBER' | 'FORMATTED_STRING';
 }
 
+/**
+ * Parse the starting row number from an A1 range (e.g., "A5:Z100" → 5).
+ * Defaults to 1 when no row number is encoded (e.g., column-only "A:A").
+ */
+export function parseRangeStartRow(range: string | undefined): number {
+  if (!range) return 1;
+  const m = range.match(/^[A-Z]*(\d+)/);
+  return m ? parseInt(m[1], 10) : 1;
+}
+
+/**
+ * Validate `?headerRow=N` — a 1-based row index used to anchor the header
+ * row for spreadsheets where it does not live in row 1 (matrix layouts,
+ * banner rows, totals at the top, etc.). Returns undefined when the param
+ * is absent so the default-of-1 stays implicit.
+ *
+ * Throws on non-positive integers; out-of-range checks happen later when we
+ * know the actual matrix size.
+ */
+export function parseHeaderRow(input: string | undefined): number | undefined {
+  if (input === undefined || input === '') return undefined;
+  const n = Number(input);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error('Invalid headerRow. Must be a positive integer (1-based row index).');
+  }
+  return n;
+}
+
 export function parseRenderOptions(
   render: string | undefined,
   dateTime: string | undefined,

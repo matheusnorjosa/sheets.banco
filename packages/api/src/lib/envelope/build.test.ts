@@ -27,6 +27,26 @@ describe('rowsFromValues', () => {
     ]);
     expect(rows[0]).toEqual({ col_1: 'x', B: 'y', col_3: 'z' });
   });
+
+  it('uses the headerIndex offset when provided', () => {
+    // Matrix has 2 banner rows before the real header.
+    const rows = rowsFromValues([
+      ['banner row', ''],
+      ['', ''],
+      ['Nome', 'Idade'],     // index 2 — real header
+      ['Alice', '30'],
+      ['Bob', '25'],
+    ], 2);
+    expect(rows).toEqual([
+      { Nome: 'Alice', Idade: '30' },
+      { Nome: 'Bob', Idade: '25' },
+    ]);
+  });
+
+  it('returns [] when headerIndex is out of bounds', () => {
+    expect(rowsFromValues([['H'], ['v']], 5)).toEqual([]);
+    expect(rowsFromValues([['H'], ['v']], -1)).toEqual([]);
+  });
 });
 
 describe('buildEnvelope', () => {

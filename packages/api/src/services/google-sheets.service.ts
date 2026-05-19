@@ -154,9 +154,11 @@ export async function getRows(
   sheetName?: string,
   cacheTtl = 60,
   renderOptions?: RenderOptions,
+  headerRow?: number,
 ): Promise<SheetRow[]> {
   const renderKey = renderSuffix(renderOptions);
-  const cacheKey = `rows:${spreadsheetId}:${sheetName ?? '_default'}${renderKey}`;
+  const headerKey = headerRow !== undefined ? `:h${headerRow}` : '';
+  const cacheKey = `rows:${spreadsheetId}:${sheetName ?? '_default'}${renderKey}${headerKey}`;
   const cached = await cache.get<SheetRow[]>(cacheKey);
   if (cached) return cached;
 
@@ -171,10 +173,16 @@ export async function getRows(
     }));
 
     const values = response.data.values;
-    if (!values || values.length < 2) return [];
+    if (!values || values.length === 0) return [];
 
-    const headers = values[0] as string[];
-    const rows = values.slice(1).map((row) => {
+    // Legacy default: header on row 1 (matrix index 0). ?headerRow=N moves
+    // the header to matrix index N-1 (no range here — getRows always fetches
+    // the unbounded tab).
+    const headerIndex = (headerRow ?? 1) - 1;
+    if (headerIndex < 0 || headerIndex >= values.length) return [];
+
+    const headers = values[headerIndex] as string[];
+    const rows = values.slice(headerIndex + 1).map((row) => {
       const obj: SheetRow = {};
       for (let i = 0; i < headers.length; i++) {
         obj[headers[i]] = row[i] ?? '';

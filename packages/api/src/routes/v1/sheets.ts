@@ -5,7 +5,15 @@ import { NotFoundError, ValidationError, AppError } from '../../lib/errors.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 import { buildFilters, filterAnd, filterOr } from '../../utils/query-parser.js';
 import { applyPagination, castNumbers } from '../../utils/pagination.js';
-import { applyLayout, isLayout, parseRenderOptions, sanitizeRange, type Layout } from '../../utils/layout.js';
+import {
+  applyLayout,
+  isLayout,
+  parseHeaderRow,
+  parseRangeStartRow,
+  parseRenderOptions,
+  sanitizeRange,
+  type Layout,
+} from '../../utils/layout.js';
 import { buildEnvelope, rowsFromValues } from '../../lib/envelope/build.js';
 import { buildAprenderSistemaTarget, TARGET_NAME as APRENDER_TARGET } from '../../lib/targets/aprenderSistema/index.js';
 import { buildAprenderSistemaReport } from '../../lib/targets/aprenderSistema/report.js';
@@ -172,6 +180,16 @@ export async function sheetsRoutes(app: FastifyInstance) {
       throw new ValidationError((err as Error).message);
     }
 
+    // ?headerRow=N — 1-based spreadsheet row containing the header. Lets
+    // matrix-shaped sheets (banner rows above the real header) be parsed
+    // correctly. Validation against the matrix happens after fetch.
+    let headerRow: number | undefined;
+    try {
+      headerRow = parseHeaderRow(query.headerRow);
+    } catch (err) {
+      throw new ValidationError((err as Error).message);
+    }
+
     // ?envelope=v1 — structured envelope with normalization, validation, hashes.
     // Opt-in only; default response stays a flat array for backward compatibility.
     if (query.envelope === 'v1') {
@@ -194,10 +212,22 @@ export async function sheetsRoutes(app: FastifyInstance) {
         const values = await sheetsService.getRawValues(
           userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds, renderOptions,
         );
+        // Convert sheet-coord headerRow to matrix-relative headerIndex.
+        // Range startRow defaults to 1 when no ?range= is given, so
+        // headerRow=N maps to matrix index N-1 — matching legacy semantics.
+        const startRow = parseRangeStartRow(range);
+        const headerIndex = headerRow !== undefined ? headerRow - startRow : 0;
+        if (headerRow !== undefined && (headerIndex < 0 || (values.length > 0 && headerIndex >= values.length))) {
+          throw new AppError(
+            400,
+            'HEADER_ROW_OUTSIDE_RANGE',
+            `headerRow=${headerRow} is not within the fetched data (covers rows ${startRow}..${startRow + Math.max(0, values.length - 1)}).`,
+          );
+        }
         envelope = buildEnvelope({
           apiId: sheetApi.id,
           apiName,
-          sheets: [{ name: sheetName, rows: rowsFromValues(values) }],
+          sheets: [{ name: sheetName, rows: rowsFromValues(values, headerIndex) }],
         });
       } else {
         const allRaw = await sheetsService.getAllSheetsRaw(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
@@ -238,9 +268,25 @@ export async function sheetsRoutes(app: FastifyInstance) {
       const values = await sheetsService.getRawValues(
         userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds, renderOptions,
       );
-      rows = applyLayout(values, 'table') as sheetsService.SheetRow[];
+      // Apply ?headerRow= offset via slicing if user provided one.
+      if (headerRow !== undefined) {
+        const startRow = parseRangeStartRow(range);
+        const headerIndex = headerRow - startRow;
+        if (headerIndex < 0 || (values.length > 0 && headerIndex >= values.length)) {
+          throw new AppError(
+            400,
+            'HEADER_ROW_OUTSIDE_RANGE',
+            `headerRow=${headerRow} is not within the fetched data (covers rows ${startRow}..${startRow + Math.max(0, values.length - 1)}).`,
+          );
+        }
+        // applyLayout expects header at index 0; slice off banner rows above.
+        const sliced = values.slice(headerIndex);
+        rows = applyLayout(sliced, 'table') as sheetsService.SheetRow[];
+      } else {
+        rows = applyLayout(values, 'table') as sheetsService.SheetRow[];
+      }
     } else {
-      rows = await sheetsService.getRows(userId, spreadsheetId, sheetName, sheetApi.cacheTtlSeconds, renderOptions);
+      rows = await sheetsService.getRows(userId, spreadsheetId, sheetName, sheetApi.cacheTtlSeconds, renderOptions, headerRow);
     }
 
     // Apply computed fields (default: true)
@@ -395,11 +441,15 @@ export async function sheetsRoutes(app: FastifyInstance) {
     const userId = getUserId(request);
     const query = getQueryParams(request);
 
-    const validated = validateWorkbookQuery({ sheet: query.sheet, range: query.range });
+    const validated = validateWorkbookQuery({
+      sheet: query.sheet,
+      range: query.range,
+      headerRow: query.headerRow,
+    });
     if (!validated.ok) {
       throw new AppError(400, validated.code, validated.message);
     }
-    const { sheet: sheetName, range } = validated;
+    const { sheet: sheetName, range, header_row } = validated;
 
     // Render options forward to Google's valueRenderOption / dateTimeRenderOption.
     let renderOptions;
@@ -419,17 +469,22 @@ export async function sheetsRoutes(app: FastifyInstance) {
     const values = await sheetsService.getRawValues(
       userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds, renderOptions,
     );
-    const snapshot = buildWorkbookSheetSnapshot({
+    const result = buildWorkbookSheetSnapshot({
       sheet_index: sheetIndex,
       sheet_name: sheetName,
       values,
       range,
+      header_row,
     });
+
+    if (!result.ok) {
+      throw new AppError(400, result.code, result.message);
+    }
 
     return {
       api_id: sheetApi.id,
       exported_at: new Date().toISOString(),
-      sheet: snapshot,
+      sheet: result.snapshot,
     };
   });
 
