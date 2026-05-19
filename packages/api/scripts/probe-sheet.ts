@@ -3,11 +3,17 @@
  *
  * Calls GET /:apiId/workbook.json against a running sheets.banco instance
  * and prints shape metrics ONLY. Never prints cell content, header names,
- * or row payloads — even on error.
+ * row payloads, or the credential — even on error.
+ *
+ * Auth:
+ *   - `API_KEY`     → sent as `X-API-Key: <value>` (current real contract)
+ *   - `API_BEARER`  → sent as `Authorization: Bearer <value>` (fallback)
+ *   - When both are set, `API_KEY` wins.
+ *   - When neither is set, the script aborts before any HTTP call.
  *
  * Usage:
- *   API_BASE_URL=http://localhost:3000 \
- *   API_BEARER=<token> \
+ *   API_BASE_URL=https://sheets-banco-api.onrender.com \
+ *   API_KEY=<api-key> \
  *   tsx scripts/probe-sheet.ts \
  *     --apiId <cuid> \
  *     --sheet "ℹ️ FORMAÇÕES" \
@@ -18,13 +24,15 @@
  * output to `jq -s .` if you want an array, or to a file you control.
  */
 
+type AuthMode = 'apikey' | 'bearer';
+
 interface ProbeArgs {
   apiId: string;
   sheet: string;
   ranges: string[];
   headerRows: number[];
   baseUrl: string;
-  bearer?: string;
+  auth: { mode: AuthMode; value: string };
 }
 
 interface ProbeMetric {
@@ -55,7 +63,11 @@ function parseArgs(argv: string[]): ProbeArgs {
     else if (a === '--headerRows') { out.headerRows = next.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isInteger(n) && n > 0); i++; }
   }
   out.baseUrl = process.env.API_BASE_URL ?? 'http://localhost:3000';
-  out.bearer = process.env.API_BEARER;
+  const apiKey = process.env.API_KEY;
+  const bearer = process.env.API_BEARER;
+  if (apiKey) out.auth = { mode: 'apikey', value: apiKey };
+  else if (bearer) out.auth = { mode: 'bearer', value: bearer };
+  else throw new Error('Missing API_KEY or API_BEARER');
   if (!out.apiId) throw new Error('Missing --apiId');
   if (!out.sheet) throw new Error('Missing --sheet');
   if ((out.ranges?.length ?? 0) === 0 && (out.headerRows?.length ?? 0) === 0) {
@@ -89,7 +101,8 @@ async function probe(args: ProbeArgs, range: string | null, headerRow: number | 
   if (headerRow !== null) params.set('headerRow', String(headerRow));
   const url = `${args.baseUrl}/api/v1/${encodeURIComponent(args.apiId)}/workbook.json?${params.toString()}`;
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (args.bearer) headers.Authorization = `Bearer ${args.bearer}`;
+  if (args.auth.mode === 'apikey') headers['X-API-Key'] = args.auth.value;
+  else headers.Authorization = `Bearer ${args.auth.value}`;
 
   const res = await fetch(url, { headers });
   const status = res.status;
