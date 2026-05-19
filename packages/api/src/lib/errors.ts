@@ -3,6 +3,12 @@ export class AppError extends Error {
     public statusCode: number,
     public code: string,
     message: string,
+    /**
+     * Optional structured payload that the global error handler will surface
+     * to clients alongside the standard fields. Use this for actionable
+     * context like `enable_url` for `accessNotConfigured`.
+     */
+    public details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'AppError';

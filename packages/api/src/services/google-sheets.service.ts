@@ -57,10 +57,70 @@ function renderSuffix(opts?: RenderOptions): string {
   return `:${opts.valueRenderOption ?? '_default'}:${opts.dateTimeRenderOption ?? '_default'}`;
 }
 
+/**
+ * Extract the first `errors[].reason` from a googleapis error.
+ * Empty/missing → undefined. Pure; exported for tests.
+ */
+export function getErrorReason(err: unknown): string | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const errors = (err as { errors?: Array<{ reason?: string }> }).errors;
+  return Array.isArray(errors) ? errors[0]?.reason : undefined;
+}
+
+/**
+ * Pull the "enable this API" URL out of an accessNotConfigured error. Tries
+ * `errors[].extendedHelp` first (the structured field Google ships), falls
+ * back to scanning the human-readable message for a `console.*` URL.
+ * Returns undefined if neither is present.
+ */
+export function extractEnableUrl(err: unknown): string | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const errors = (err as { errors?: Array<{ extendedHelp?: string }> }).errors;
+  if (Array.isArray(errors) && typeof errors[0]?.extendedHelp === 'string') {
+    return errors[0].extendedHelp;
+  }
+  const msg = String((err as { message?: unknown }).message ?? '');
+  const m = msg.match(/https?:\/\/console\.[^\s,)]+/);
+  return m ? m[0] : undefined;
+}
+
+/**
+ * Map a googleapis error to an AppError with a stable taxonomy. Recognized
+ * Google `reason` values are surfaced as typed 4xx codes; otherwise the
+ * pre-existing 403/404 → SheetAccessError fallback applies. Anything else
+ * is re-thrown so the global error handler turns it into 500
+ * (intentional — we don't want to mask unknown failure modes).
+ */
 function handleSheetError(error: unknown): never {
   if (error instanceof AppError) throw error;
   if (error instanceof Error && 'code' in error) {
     const code = (error as { code: number }).code;
+    const reason = getErrorReason(error);
+    const message = String((error as { message?: unknown }).message ?? '');
+
+    // Google Sheets API not enabled for this project. Surface the enable_url
+    // so the caller can fix it in one click.
+    if (reason === 'accessNotConfigured') {
+      const enableUrl = extractEnableUrl(error);
+      throw new AppError(
+        400,
+        'GOOGLE_API_NOT_ENABLED',
+        message || 'The Google Sheets API is not enabled in this project.',
+        enableUrl ? { enable_url: enableUrl } : undefined,
+      );
+    }
+
+    // Quota / rate-limit signaling from Google. By the time we get here, the
+    // backoff layer (PR #27) has already retried 3× and still failed — pass
+    // through as 429 so the consumer knows to slow down.
+    if (reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded') {
+      throw new AppError(429, 'GOOGLE_RATE_LIMIT', message || 'Google rate limit exceeded.');
+    }
+    if (reason === 'quotaExceeded') {
+      throw new AppError(429, 'GOOGLE_QUOTA_EXCEEDED', message || 'Google quota exceeded.');
+    }
+
+    // Vanilla permission denied / not found.
     if (code === 403 || code === 404) {
       throw new SheetAccessError();
     }
