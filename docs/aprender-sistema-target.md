@@ -86,6 +86,48 @@ Not honored on the target adapter paths
 (`?target=aprender_sistema`, `/report`, `/export.csv`) — those expect a
 header on row 1 by design.
 
+### Matrix-shaped tabs (banner rows, monthly calendars, totals on top)
+
+Tabs whose first rows are blank, a title banner, or a totals strip —
+common in availability calendars (`MENSAL`, `Disponibilidade`) — return
+`[{},{},...]` (legacy) or `row_count=0` (envelope/workbook) when called
+without `?headerRow=` or `?range=`. This is **intentional**: the API
+does not auto-detect header offsets, because guessing produces silent
+wrong answers when the spreadsheet shape changes underneath consumers.
+Pin the row explicitly per tab.
+
+Behavior matrix for a tab whose real header is on row 5:
+
+| Request | Result |
+|---|---|
+| `GET /:apiId` (no `?sheet=`, default tab is matrix-shaped) | `[{},{},...]` |
+| `GET /:apiId?sheet=MENSAL` | `[{},{},...]` |
+| `GET /:apiId?sheet=MENSAL&headerRow=5` | rows from row 6 onward, keyed by row-5 headers |
+| `GET /:apiId/workbook.json?sheet=MENSAL` | `row_count=0`, `headers_count=0` |
+| `GET /:apiId/workbook.json?sheet=MENSAL&headerRow=5` | full snapshot anchored at row 5 |
+| `GET /:apiId/workbook.json?sheet=MENSAL&range=A5:Z30` | works too — header taken from first row of range |
+
+Consumers that import multiple workbooks should keep a per-sheet
+`headerRow` (or `range`) hint in their config so the same client code
+handles row-1 and matrix-shaped tabs without branching:
+
+```json
+{
+  "api_id": "...",
+  "sheets": [
+    { "name": "Eventos" },
+    { "name": "Bloqueios" },
+    { "name": "DESLOCAMENTO" },
+    { "name": "MENSAL", "headerRow": 5 }
+  ]
+}
+```
+
+This keeps `sheets.banco` neutral about which tabs each workbook uses
+and where their headers live, while letting the consumer encode the
+known-working offsets per spreadsheet. See Issue #24 for the original
+diagnosis.
+
 ## Value rendering — `?render=` and `?dateTime=`
 
 Two opt-in params forward directly to Google's `valueRenderOption` and

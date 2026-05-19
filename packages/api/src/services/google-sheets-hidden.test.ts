@@ -42,7 +42,7 @@ vi.mock('./cache.service.js', () => {
   };
 });
 
-import { listSheetNames, listSheetMetadata, listSheetsWithTypes, getRawValues, resolveTabByIdOrName } from './google-sheets.service.js';
+import { listSheetNames, listSheetsWithTypes, getRawValues } from './google-sheets.service.js';
 import { NotFoundError } from '../lib/errors.js';
 import * as cache from './cache.service.js';
 
