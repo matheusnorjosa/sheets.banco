@@ -34,6 +34,35 @@ scope the work to a single tab — see [Per-sheet extraction](#per-sheet-extract
 - `?sheet=<name>` is opt-in. Without it, the heavy surfaces still process
   every tab — fine for small spreadsheets, risky for big ones.
 
+## Stable `sheetId` — pin to a numeric ID instead of a tab name
+
+The Google Sheets API exposes a numeric `sheetId` per tab that is stable
+across renames. `/sheets?include=types` now includes `sheet_id` and
+`sheet_index` alongside `name` so consumers can pin their config to the
+numeric ID and survive tab renames.
+
+```json
+{
+  "sheets": [
+    { "name": "Eventos", "sheet_id": 1234567890, "sheet_index": 0, "detected_type": "eventos", "columns": [...] }
+  ]
+}
+```
+
+All read endpoints that already accept `?sheet=<name>` now also accept
+`?sheetId=<numeric>`. When both are present, `?sheetId=` wins so renames
+do not break configured consumers. Behavior when neither is set is
+unchanged.
+
+```
+GET /api/v1/:apiId?envelope=v1&sheetId=1234567890
+GET /api/v1/:apiId/workbook.json?sheetId=1234567890
+GET /api/v1/:apiId/report?target=aprender_sistema&sheetId=1234567890
+```
+
+A `?sheetId=` that points to a non-existent or hidden tab returns
+**404**. Non-integer values return **400 `INVALID_SHEET_ID`**.
+
 ## Header offset — `?headerRow=N`
 
 Spreadsheets often have banner rows, totals, or matrix layouts that push

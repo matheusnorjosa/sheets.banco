@@ -128,7 +128,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
     const sheetApi = getSheetApi(request);
     const userId = getUserId(request);
     const query = getQueryParams(request);
-    const sheetName = query.sheet;
+    let sheetName: string | undefined = query.sheet;
 
     // Snapshot version support
     if (query.version) {
@@ -158,6 +158,18 @@ export async function sheetsRoutes(app: FastifyInstance) {
 
     // Multi-spreadsheet support
     const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+
+    // ?sheetId=<numeric> resolves to the current tab name (rename-safe pin).
+    // Wins over ?sheet= when both are present. If ?sheetId= points to a tab
+    // that doesn't exist (or is hidden), respond 404 — same semantics as the
+    // workbook.json handler.
+    if (query.sheetId) {
+      const resolved = await sheetsService.resolveTabByIdOrName(userId, spreadsheetId, query, sheetApi.cacheTtlSeconds);
+      if (!resolved) {
+        throw new NotFoundError(`Sheet with sheetId=${query.sheetId} not found.`);
+      }
+      sheetName = resolved;
+    }
 
     // Layout & range params
     const layout: Layout = isLayout(query.layout) ? query.layout : 'table';
@@ -345,7 +357,15 @@ export async function sheetsRoutes(app: FastifyInstance) {
   ) {
     const apiName = (sheetApi as any).name || sheetApi.id;
     const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
-    const sheetName = query.sheet;
+    // ?sheetId=<numeric> resolves to the current tab name. Wins over ?sheet=.
+    let sheetName: string | undefined = query.sheet;
+    if (query.sheetId) {
+      const resolved = await sheetsService.resolveTabByIdOrName(userId, spreadsheetId, query, sheetApi.cacheTtlSeconds);
+      if (!resolved) {
+        throw new NotFoundError(`Sheet with sheetId=${query.sheetId} not found.`);
+      }
+      sheetName = resolved;
+    }
     let range: string | undefined;
     try {
       range = sanitizeRange(query.range);
@@ -441,8 +461,21 @@ export async function sheetsRoutes(app: FastifyInstance) {
     const userId = getUserId(request);
     const query = getQueryParams(request);
 
+    // ?sheetId=<numeric> wins over ?sheet=. Look up the current name from
+    // the cached metadata so the rest of the handler can use the name-based
+    // path it already understands.
+    let effectiveSheetName = query.sheet;
+    const spreadsheetIdEarly = await resolveSpreadsheetId(sheetApi, query);
+    if (query.sheetId) {
+      const resolved = await sheetsService.resolveTabByIdOrName(userId, spreadsheetIdEarly, query, sheetApi.cacheTtlSeconds);
+      if (!resolved) {
+        throw new NotFoundError(`Sheet with sheetId=${query.sheetId} not found.`);
+      }
+      effectiveSheetName = resolved;
+    }
+
     const validated = validateWorkbookQuery({
-      sheet: query.sheet,
+      sheet: effectiveSheetName,
       range: query.range,
       headerRow: query.headerRow,
     });
@@ -459,7 +492,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
       throw new ValidationError((err as Error).message);
     }
 
-    const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
+    const spreadsheetId = spreadsheetIdEarly;
     const names = await sheetsService.listSheetNames(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
     const sheetIndex = names.indexOf(sheetName);
     if (sheetIndex < 0) {

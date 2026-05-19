@@ -41,7 +41,7 @@ vi.mock('./cache.service.js', () => {
   };
 });
 
-import { listSheetNames, listSheetsWithTypes, getRawValues } from './google-sheets.service.js';
+import { listSheetNames, listSheetMetadata, listSheetsWithTypes, getRawValues, resolveTabByIdOrName } from './google-sheets.service.js';
 import { NotFoundError } from '../lib/errors.js';
 import * as cache from './cache.service.js';
 
@@ -52,12 +52,19 @@ beforeEach(() => {
   cacheStore.clear();
 });
 
-// Helper: shape a fake Google response with hidden flags by tab.
-function fakeSpreadsheet(tabs: Array<{ title: string; hidden?: boolean }>) {
+// Helper: shape a fake Google response with hidden flags by tab. sheetId
+// and index are synthesised (i*100+1, i) when not provided — synthetic but
+// deterministic, never collides with real Google IDs.
+function fakeSpreadsheet(tabs: Array<{ title: string; hidden?: boolean; sheetId?: number; index?: number }>) {
   return {
     data: {
-      sheets: tabs.map(({ title, hidden }) => ({
-        properties: hidden !== undefined ? { title, hidden } : { title },
+      sheets: tabs.map(({ title, hidden, sheetId, index }, i) => ({
+        properties: {
+          title,
+          ...(hidden !== undefined && { hidden }),
+          sheetId: sheetId ?? i * 100 + 1,
+          index: index ?? i,
+        },
       })),
     },
   };

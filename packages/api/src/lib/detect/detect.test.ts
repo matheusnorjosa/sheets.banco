@@ -88,9 +88,13 @@ describe('detectType', () => {
 });
 
 describe('buildSheetsWithTypes', () => {
-  it('zips names and headers, classifying each tab', () => {
+  // Synthetic metadata: index = position, sheet_id = position * 100 + 1.
+  const meta = (names: string[]) =>
+    names.map((name, i) => ({ name, sheet_id: i * 100 + 1, sheet_index: i }));
+
+  it('zips metadata and headers, classifying each tab', () => {
     const result = buildSheetsWithTypes(
-      ['Usuarios', 'Random', 'Bloqueios'],
+      meta(['Usuarios', 'Random', 'Bloqueios']),
       [
         ['Nome', 'CPF', 'Email', 'Cargo'],
         ['foo', 'bar'],
@@ -98,34 +102,33 @@ describe('buildSheetsWithTypes', () => {
       ],
     );
     expect(result).toEqual([
-      { name: 'Usuarios',  detected_type: 'users',     columns: ['Nome', 'CPF', 'Email', 'Cargo'] },
-      { name: 'Random',    detected_type: 'unknown',   columns: ['foo', 'bar'] },
-      { name: 'Bloqueios', detected_type: 'bloqueios', columns: ['Usuario', 'Início', 'Fim', 'Tipo'] },
+      { name: 'Usuarios',  sheet_id: 1,   sheet_index: 0, detected_type: 'users',     columns: ['Nome', 'CPF', 'Email', 'Cargo'] },
+      { name: 'Random',    sheet_id: 101, sheet_index: 1, detected_type: 'unknown',   columns: ['foo', 'bar'] },
+      { name: 'Bloqueios', sheet_id: 201, sheet_index: 2, detected_type: 'bloqueios', columns: ['Usuario', 'Início', 'Fim', 'Tipo'] },
     ]);
   });
 
   it('treats missing / null header rows as unknown without dropping the tab', () => {
     const result = buildSheetsWithTypes(
-      ['Empty', 'AlsoEmpty'],
+      meta(['Empty', 'AlsoEmpty']),
       [undefined, null],
     );
     expect(result).toEqual([
-      { name: 'Empty',     detected_type: 'unknown', columns: [] },
-      { name: 'AlsoEmpty', detected_type: 'unknown', columns: [] },
+      { name: 'Empty',     sheet_id: 1,   sheet_index: 0, detected_type: 'unknown', columns: [] },
+      { name: 'AlsoEmpty', sheet_id: 101, sheet_index: 1, detected_type: 'unknown', columns: [] },
     ]);
   });
 
   it('coerces non-string header cells (numbers, nulls) to strings', () => {
-    // Day-number headers come back from Google as either strings or numbers
-    // depending on the cell format. detectType expects strings, so coercion
-    // here keeps the contract consistent.
     const days = Array.from({ length: 31 }, (_, i) => i + 1);
     const result = buildSheetsWithTypes(
-      ['Mensal'],
+      meta(['Mensal']),
       [['Formador', ...(days as unknown as string[])]],
     );
     expect(result[0].detected_type).toBe('disponibilidade_mensal');
     expect(result[0].columns).toEqual(['Formador', ...days.map(String)]);
+    expect(result[0].sheet_id).toBe(1);
+    expect(result[0].sheet_index).toBe(0);
   });
 
   it('returns an empty array for an empty name list', () => {

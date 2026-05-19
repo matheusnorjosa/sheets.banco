@@ -101,23 +101,43 @@ function hasAll(keys: Set<string>, required: string[]): boolean {
 
 export interface SheetWithType {
   name: string;
+  /**
+   * Numeric Google Sheets ID. Stable across renames — pin consumer configs
+   * to this instead of `name` if you want to survive tab renames. Null only
+   * when Google's response somehow omits the field.
+   */
+  sheet_id: number | null;
+  /** 0-based position in the spreadsheet, in tab-bar order. */
+  sheet_index: number;
   detected_type: SheetType;
   columns: string[];
 }
 
+export interface SheetMetadata {
+  name: string;
+  sheet_id: number | null;
+  sheet_index: number;
+}
+
 /**
- * Pure mapper used by the typed-discovery endpoint. Takes a list of tab names
- * and, in the same order, the first row (headers) fetched for each tab.
- * Missing/short header arrays are treated as empty — the tab is still
+ * Pure mapper used by the typed-discovery endpoint. Takes a list of tab
+ * metadata and, in the same order, the first row (headers) fetched for each
+ * tab. Missing/short header arrays are treated as empty — the tab is still
  * reported, just classified as `unknown`.
  */
 export function buildSheetsWithTypes(
-  names: string[],
+  meta: ReadonlyArray<SheetMetadata>,
   headersByIndex: ReadonlyArray<ReadonlyArray<string> | null | undefined>,
 ): SheetWithType[] {
-  return names.map((name, i) => {
+  return meta.map((m, i) => {
     const raw = headersByIndex[i] ?? [];
     const columns = raw.map((h) => String(h ?? ''));
-    return { name, detected_type: detectType(columns), columns };
+    return {
+      name: m.name,
+      sheet_id: m.sheet_id,
+      sheet_index: m.sheet_index,
+      detected_type: detectType(columns),
+      columns,
+    };
   });
 }
