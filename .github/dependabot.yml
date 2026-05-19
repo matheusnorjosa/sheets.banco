@@ -9,6 +9,15 @@ updates:
       timezone: America/Sao_Paulo
     open-pull-requests-limit: 5
     groups:
+      # Coordinate Prisma updates — `@prisma/client` and `prisma` (CLI) must
+      # be on the same major or `prisma generate` fails. Catches all bump
+      # types (major included) so the two packages always ship together.
+      # Closed PR #36 (only bumped client to 7.x without CLI) is the case
+      # this group prevents.
+      prisma:
+        patterns:
+          - "@prisma/*"
+          - "prisma"
       # Group minor + patch bumps to avoid PR noise
       minor-and-patch:
         update-types:
