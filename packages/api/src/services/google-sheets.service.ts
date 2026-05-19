@@ -4,6 +4,7 @@ import { processSpecialValues } from '../utils/special-values.js';
 import * as cache from './cache.service.js';
 import { getOAuthClient } from './oauth-pool.service.js';
 import { buildSheetsWithTypes, type SheetWithType } from '../lib/detect/index.js';
+import { withBackoff } from './google-backoff.js';
 
 export type { SheetWithType };
 
@@ -30,10 +31,10 @@ async function resolveSheetName(userId: string, spreadsheetId: string, sheetName
   if (cached) return cached;
 
   const sheets = await getSheetsClient(userId);
-  const response = await sheets.spreadsheets.get({
+  const response = await withBackoff(() => sheets.spreadsheets.get({
     spreadsheetId,
     fields: 'sheets.properties(title,hidden)',
-  });
+  }));
   const firstSheet = (response.data.sheets ?? [])
     .find((s) => !s.properties?.hidden)
     ?.properties?.title;
@@ -87,10 +88,10 @@ export async function getRows(
   try {
     const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const response = await sheets.spreadsheets.values.get({
+    const response = await withBackoff(() => sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `'${tab}'`,
-    });
+    }));
 
     const values = response.data.values;
     if (!values || values.length < 2) return [];
@@ -141,10 +142,10 @@ export async function listSheetNames(
 
   try {
     const sheets = await getSheetsClient(userId);
-    const response = await sheets.spreadsheets.get({
+    const response = await withBackoff(() => sheets.spreadsheets.get({
       spreadsheetId,
       fields: 'sheets.properties(title,hidden)',
-    });
+    }));
     const names = (response.data.sheets ?? [])
       .filter((s) => !s.properties?.hidden)
       .map((s) => s.properties?.title)
@@ -179,10 +180,10 @@ export async function listSheetsWithTypes(
     const sheets = await getSheetsClient(userId);
     // A1 notation: double single quotes inside the tab name.
     const ranges = names.map((n) => `'${n.replace(/'/g, "''")}'!1:1`);
-    const response = await sheets.spreadsheets.values.batchGet({
+    const response = await withBackoff(() => sheets.spreadsheets.values.batchGet({
       spreadsheetId,
       ranges,
-    });
+    }));
     const valueRanges = response.data.valueRanges ?? [];
     const headersByIndex = names.map((_, i) => {
       const firstRow = valueRanges[i]?.values?.[0];
@@ -214,10 +215,10 @@ export async function getRawValues(
     const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
     const fullRange = range ? `'${tab}'!${range}` : `'${tab}'`;
-    const response = await sheets.spreadsheets.values.get({
+    const response = await withBackoff(() => sheets.spreadsheets.values.get({
       spreadsheetId,
       range: fullRange,
-    });
+    }));
 
     const values = (response.data.values as string[][]) ?? [];
     await cache.set(cacheKey, values, cacheTtl);
@@ -251,10 +252,10 @@ export async function getAllSheetsRaw(
     if (names.length === 0) return {};
 
     const sheets = await getSheetsClient(userId);
-    const response = await sheets.spreadsheets.values.batchGet({
+    const response = await withBackoff(() => sheets.spreadsheets.values.batchGet({
       spreadsheetId,
       ranges: names.map((n) => `'${n}'`),
-    });
+    }));
 
     const result: Record<string, string[][]> = {};
     const valueRanges = response.data.valueRanges ?? [];
@@ -282,10 +283,10 @@ export async function getColumnNames(
   try {
     const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const response = await sheets.spreadsheets.values.get({
+    const response = await withBackoff(() => sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `'${tab}'!1:1`,
-    });
+    }));
 
     const columns = (response.data.values?.[0] as string[]) ?? [];
     await cache.set(cacheKey, columns, cacheTtl);
@@ -303,10 +304,10 @@ export async function getRowCount(
   try {
     const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const response = await sheets.spreadsheets.values.get({
+    const response = await withBackoff(() => sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `'${tab}'`,
-    });
+    }));
 
     const values = response.data.values;
     if (!values || values.length < 2) return 0;
@@ -322,7 +323,7 @@ async function getSheetId(
   sheetName?: string,
 ): Promise<number> {
   const sheets = await getSheetsClient(userId);
-  const response = await sheets.spreadsheets.get({ spreadsheetId });
+  const response = await withBackoff(() => sheets.spreadsheets.get({ spreadsheetId }));
   const sheetsList = response.data.sheets ?? [];
 
   if (!sheetName) {
@@ -355,12 +356,12 @@ export async function appendRows(
     });
 
     const sheets = await getSheetsClient(userId);
-    await sheets.spreadsheets.values.append({
+    await withBackoff(() => sheets.spreadsheets.values.append({
       spreadsheetId,
       range: `'${tab}'`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values },
-    });
+    }));
 
     await invalidateCache(spreadsheetId);
     return rows.length;
@@ -381,10 +382,10 @@ export async function updateRows(
   try {
     const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const response = await sheets.spreadsheets.values.get({
+    const response = await withBackoff(() => sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `'${tab}'`,
-    });
+    }));
 
     const allValues = response.data.values;
     if (!allValues || allValues.length < 2) return 0;
@@ -407,12 +408,12 @@ export async function updateRows(
           if (ki !== -1) newRow[ki] = val;
         }
 
-        await sheets.spreadsheets.values.update({
+        await withBackoff(() => sheets.spreadsheets.values.update({
           spreadsheetId,
           range: `'${tab}'!A${i + 1}`,
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [newRow] },
-        });
+        }));
         updated++;
       }
     }
@@ -435,10 +436,10 @@ export async function deleteRows(
   try {
     const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const response = await sheets.spreadsheets.values.get({
+    const response = await withBackoff(() => sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `'${tab}'`,
-    });
+    }));
 
     const allValues = response.data.values;
     if (!allValues || allValues.length < 2) return 0;
@@ -471,10 +472,10 @@ export async function deleteRows(
       },
     }));
 
-    await sheets.spreadsheets.batchUpdate({
+    await withBackoff(() => sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: { requests },
-    });
+    }));
 
     await invalidateCache(spreadsheetId);
     return rowIndicesToDelete.length;
@@ -492,10 +493,10 @@ export async function clearAllRows(
   try {
     const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
     const sheets = await getSheetsClient(userId);
-    const response = await sheets.spreadsheets.values.get({
+    const response = await withBackoff(() => sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `'${tab}'`,
-    });
+    }));
 
     const allValues = response.data.values;
     if (!allValues || allValues.length < 2) return 0;
@@ -503,7 +504,7 @@ export async function clearAllRows(
     const rowCount = allValues.length - 1;
     const sheetId = await getSheetId(userId, spreadsheetId, tab);
 
-    await sheets.spreadsheets.batchUpdate({
+    await withBackoff(() => sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       requestBody: {
         requests: [
@@ -519,7 +520,7 @@ export async function clearAllRows(
           },
         ],
       },
-    });
+    }));
 
     await invalidateCache(spreadsheetId);
     return rowCount;
