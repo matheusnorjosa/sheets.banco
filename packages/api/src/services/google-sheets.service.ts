@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { google, type sheets_v4 } from 'googleapis';
 import { NotFoundError, SheetAccessError, AppError } from '../lib/errors.js';
 import { processSpecialValues } from '../utils/special-values.js';
@@ -6,6 +9,40 @@ import { getOAuthClient } from './oauth-pool.service.js';
 import { buildSheetsWithTypes, type SheetMetadata, type SheetWithType } from '../lib/detect/index.js';
 import { withBackoff } from './google-backoff.js';
 import type { RenderOptions } from '../utils/layout.js';
+
+/**
+ * Best-effort read of this package's version so we can identify our client to
+ * Google via the standard `x-goog-api-client` header. The path is the same
+ * in dev (tsx, src/services/) and in prod (node dist/, dist/services/) — both
+ * sit two levels below the workspace's package.json.
+ */
+function readPackageVersion(): string {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8'));
+    return typeof pkg.version === 'string' && pkg.version.length > 0 ? pkg.version : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Compose the `x-goog-api-client` value Google expects from any client.
+ * Format mirrors googleapis' own convention: `gl-<lang>/<client>-<version>`.
+ * Pure so it's directly testable.
+ */
+export function buildGoogleApiClientHeader(version: string): string {
+  return `gl-nodejs/sheets.banco-${version || 'unknown'}`;
+}
+
+const GOOGLE_API_CLIENT_HEADER = buildGoogleApiClientHeader(readPackageVersion());
+
+// Identify this client globally so every googleapis call carries the header.
+// Done once at module load. Safe to call even when other services (e.g.
+// oauth-pool) construct their own clients — the option is a process-wide
+// default and downstream clients can still override per-call.
+google.options({ headers: { 'x-goog-api-client': GOOGLE_API_CLIENT_HEADER } });
 
 export type { SheetWithType };
 
