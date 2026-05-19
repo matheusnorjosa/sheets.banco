@@ -5,6 +5,7 @@ import * as cache from './cache.service.js';
 import { getOAuthClient } from './oauth-pool.service.js';
 import { buildSheetsWithTypes, type SheetWithType } from '../lib/detect/index.js';
 import { withBackoff } from './google-backoff.js';
+import type { RenderOptions } from '../utils/layout.js';
 
 export type { SheetWithType };
 
@@ -44,6 +45,18 @@ async function resolveSheetName(userId: string, spreadsheetId: string, sheetName
   return firstSheet;
 }
 
+/**
+ * Build a stable cache-key suffix from render options. When neither value
+ * nor dateTime override is requested, returns the empty string so existing
+ * cached entries (pre-render-options) stay valid. Otherwise appends a fixed
+ * `:<value>:<dateTime>` suffix using `_default` as the placeholder for the
+ * option not explicitly overridden.
+ */
+function renderSuffix(opts?: RenderOptions): string {
+  if (!opts?.valueRenderOption && !opts?.dateTimeRenderOption) return '';
+  return `:${opts.valueRenderOption ?? '_default'}:${opts.dateTimeRenderOption ?? '_default'}`;
+}
+
 function handleSheetError(error: unknown): never {
   if (error instanceof AppError) throw error;
   if (error instanceof Error && 'code' in error) {
@@ -80,8 +93,10 @@ export async function getRows(
   spreadsheetId: string,
   sheetName?: string,
   cacheTtl = 60,
+  renderOptions?: RenderOptions,
 ): Promise<SheetRow[]> {
-  const cacheKey = `rows:${spreadsheetId}:${sheetName ?? '_default'}`;
+  const renderKey = renderSuffix(renderOptions);
+  const cacheKey = `rows:${spreadsheetId}:${sheetName ?? '_default'}${renderKey}`;
   const cached = await cache.get<SheetRow[]>(cacheKey);
   if (cached) return cached;
 
@@ -91,6 +106,8 @@ export async function getRows(
     const response = await withBackoff(() => sheets.spreadsheets.values.get({
       spreadsheetId,
       range: `'${tab}'`,
+      ...(renderOptions?.valueRenderOption && { valueRenderOption: renderOptions.valueRenderOption }),
+      ...(renderOptions?.dateTimeRenderOption && { dateTimeRenderOption: renderOptions.dateTimeRenderOption }),
     }));
 
     const values = response.data.values;
@@ -206,8 +223,10 @@ export async function getRawValues(
   sheetName?: string,
   range?: string,
   cacheTtl = 60,
+  renderOptions?: RenderOptions,
 ): Promise<string[][]> {
-  const cacheKey = `raw:${spreadsheetId}:${sheetName ?? '_default'}:${range ?? '_full'}`;
+  const renderKey = renderSuffix(renderOptions);
+  const cacheKey = `raw:${spreadsheetId}:${sheetName ?? '_default'}:${range ?? '_full'}${renderKey}`;
   const cached = await cache.get<string[][]>(cacheKey);
   if (cached) return cached;
 
@@ -218,6 +237,8 @@ export async function getRawValues(
     const response = await withBackoff(() => sheets.spreadsheets.values.get({
       spreadsheetId,
       range: fullRange,
+      ...(renderOptions?.valueRenderOption && { valueRenderOption: renderOptions.valueRenderOption }),
+      ...(renderOptions?.dateTimeRenderOption && { dateTimeRenderOption: renderOptions.dateTimeRenderOption }),
     }));
 
     const values = (response.data.values as string[][]) ?? [];

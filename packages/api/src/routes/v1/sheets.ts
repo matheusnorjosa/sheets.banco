@@ -5,7 +5,7 @@ import { NotFoundError, ValidationError, AppError } from '../../lib/errors.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 import { buildFilters, filterAnd, filterOr } from '../../utils/query-parser.js';
 import { applyPagination, castNumbers } from '../../utils/pagination.js';
-import { applyLayout, isLayout, sanitizeRange, type Layout } from '../../utils/layout.js';
+import { applyLayout, isLayout, parseRenderOptions, sanitizeRange, type Layout } from '../../utils/layout.js';
 import { buildEnvelope, rowsFromValues } from '../../lib/envelope/build.js';
 import { buildAprenderSistemaTarget, TARGET_NAME as APRENDER_TARGET } from '../../lib/targets/aprenderSistema/index.js';
 import { buildAprenderSistemaReport } from '../../lib/targets/aprenderSistema/report.js';
@@ -160,6 +160,18 @@ export async function sheetsRoutes(app: FastifyInstance) {
       throw new ValidationError((err as Error).message);
     }
 
+    // ?render= / ?dateTime= — forward to googleapis valueRenderOption /
+    // dateTimeRenderOption. Omitted = today's defaults (formatted strings).
+    // Intentionally NOT applied to the target path (envelope+target / report /
+    // export.csv) — those have their own normalization layer and rely on
+    // formatted strings.
+    let renderOptions;
+    try {
+      renderOptions = parseRenderOptions(query.render, query.dateTime);
+    } catch (err) {
+      throw new ValidationError((err as Error).message);
+    }
+
     // ?envelope=v1 — structured envelope with normalization, validation, hashes.
     // Opt-in only; default response stays a flat array for backward compatibility.
     if (query.envelope === 'v1') {
@@ -180,7 +192,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
       let envelope;
       if (sheetName) {
         const values = await sheetsService.getRawValues(
-          userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
+          userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds, renderOptions,
         );
         envelope = buildEnvelope({
           apiId: sheetApi.id,
@@ -215,7 +227,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
     // Non-table layouts: skip filters/computed/pagination (they don't apply)
     if (layout === 'raw' || layout === 'matrix') {
       const values = await sheetsService.getRawValues(
-        userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
+        userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds, renderOptions,
       );
       return applyLayout(values, layout);
     }
@@ -224,11 +236,11 @@ export async function sheetsRoutes(app: FastifyInstance) {
     let rows: sheetsService.SheetRow[];
     if (range) {
       const values = await sheetsService.getRawValues(
-        userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
+        userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds, renderOptions,
       );
       rows = applyLayout(values, 'table') as sheetsService.SheetRow[];
     } else {
-      rows = await sheetsService.getRows(userId, spreadsheetId, sheetName, sheetApi.cacheTtlSeconds);
+      rows = await sheetsService.getRows(userId, spreadsheetId, sheetName, sheetApi.cacheTtlSeconds, renderOptions);
     }
 
     // Apply computed fields (default: true)
@@ -389,6 +401,14 @@ export async function sheetsRoutes(app: FastifyInstance) {
     }
     const { sheet: sheetName, range } = validated;
 
+    // Render options forward to Google's valueRenderOption / dateTimeRenderOption.
+    let renderOptions;
+    try {
+      renderOptions = parseRenderOptions(query.render, query.dateTime);
+    } catch (err) {
+      throw new ValidationError((err as Error).message);
+    }
+
     const spreadsheetId = await resolveSpreadsheetId(sheetApi, query);
     const names = await sheetsService.listSheetNames(userId, spreadsheetId, sheetApi.cacheTtlSeconds);
     const sheetIndex = names.indexOf(sheetName);
@@ -397,7 +417,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
     }
 
     const values = await sheetsService.getRawValues(
-      userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds,
+      userId, spreadsheetId, sheetName, range, sheetApi.cacheTtlSeconds, renderOptions,
     );
     const snapshot = buildWorkbookSheetSnapshot({
       sheet_index: sheetIndex,

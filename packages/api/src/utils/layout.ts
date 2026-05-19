@@ -58,3 +58,53 @@ export function sanitizeRange(input: string | undefined): string | undefined {
   }
   return input;
 }
+
+/**
+ * Render-option mapping for Google Sheets API. Friendly param names on the
+ * outside, Google's enum values on the wire.
+ *
+ *   ?render=formatted|unformatted|formula      → valueRenderOption
+ *   ?dateTime=serial|string                     → dateTimeRenderOption
+ *
+ * Both default to undefined when omitted, which makes googleapis fall back
+ * to FORMATTED_VALUE + SERIAL_NUMBER (today's effective behaviour) — so
+ * existing callers see zero diff. The dateTime option is ignored by Google
+ * when the value option is FORMATTED_VALUE.
+ */
+const VALUE_RENDER_MAP = {
+  formatted: 'FORMATTED_VALUE',
+  unformatted: 'UNFORMATTED_VALUE',
+  formula: 'FORMULA',
+} as const;
+
+const DATETIME_RENDER_MAP = {
+  serial: 'SERIAL_NUMBER',
+  string: 'FORMATTED_STRING',
+} as const;
+
+export interface RenderOptions {
+  valueRenderOption?: 'FORMATTED_VALUE' | 'UNFORMATTED_VALUE' | 'FORMULA';
+  dateTimeRenderOption?: 'SERIAL_NUMBER' | 'FORMATTED_STRING';
+}
+
+export function parseRenderOptions(
+  render: string | undefined,
+  dateTime: string | undefined,
+): RenderOptions {
+  const out: RenderOptions = {};
+  if (render !== undefined && render !== '') {
+    const v = VALUE_RENDER_MAP[render as keyof typeof VALUE_RENDER_MAP];
+    if (!v) {
+      throw new Error(`Invalid render option: "${render}". Use one of: formatted, unformatted, formula.`);
+    }
+    out.valueRenderOption = v;
+  }
+  if (dateTime !== undefined && dateTime !== '') {
+    const v = DATETIME_RENDER_MAP[dateTime as keyof typeof DATETIME_RENDER_MAP];
+    if (!v) {
+      throw new Error(`Invalid dateTime option: "${dateTime}". Use one of: serial, string.`);
+    }
+    out.dateTimeRenderOption = v;
+  }
+  return out;
+}

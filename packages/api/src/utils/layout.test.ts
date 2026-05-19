@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeRange, isLayout, applyLayout } from './layout.js';
+import { sanitizeRange, isLayout, applyLayout, parseRenderOptions } from './layout.js';
 
 describe('sanitizeRange', () => {
   it('accepts standard A1 ranges', () => {
@@ -36,6 +36,44 @@ describe('isLayout', () => {
     expect(isLayout('')).toBe(false);
     expect(isLayout('TABLE')).toBe(false);
     expect(isLayout('csv')).toBe(false);
+  });
+});
+
+describe('parseRenderOptions', () => {
+  it('returns {} when neither param is set', () => {
+    expect(parseRenderOptions(undefined, undefined)).toEqual({});
+    expect(parseRenderOptions('', '')).toEqual({});
+  });
+
+  it.each([
+    ['formatted',   'FORMATTED_VALUE'],
+    ['unformatted', 'UNFORMATTED_VALUE'],
+    ['formula',     'FORMULA'],
+  ])('maps render=%s → valueRenderOption=%s', (input, expected) => {
+    expect(parseRenderOptions(input, undefined)).toEqual({ valueRenderOption: expected });
+  });
+
+  it.each([
+    ['serial', 'SERIAL_NUMBER'],
+    ['string', 'FORMATTED_STRING'],
+  ])('maps dateTime=%s → dateTimeRenderOption=%s', (input, expected) => {
+    expect(parseRenderOptions(undefined, input)).toEqual({ dateTimeRenderOption: expected });
+  });
+
+  it('combines both when present', () => {
+    expect(parseRenderOptions('unformatted', 'serial')).toEqual({
+      valueRenderOption: 'UNFORMATTED_VALUE',
+      dateTimeRenderOption: 'SERIAL_NUMBER',
+    });
+  });
+
+  it('throws on unknown render', () => {
+    expect(() => parseRenderOptions('json', undefined)).toThrow(/Invalid render option/);
+    expect(() => parseRenderOptions('FORMATTED_VALUE', undefined)).toThrow(/Invalid render option/);
+  });
+
+  it('throws on unknown dateTime', () => {
+    expect(() => parseRenderOptions(undefined, 'iso')).toThrow(/Invalid dateTime option/);
   });
 });
 
