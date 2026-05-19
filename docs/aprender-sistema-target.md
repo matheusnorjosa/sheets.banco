@@ -128,6 +128,23 @@ and where their headers live, while letting the consumer encode the
 known-working offsets per spreadsheet. See Issue #24 for the original
 diagnosis.
 
+### Known matrix-shaped tabs
+
+Tabs observed in the wild that need `?headerRow=` or `?range=` to read
+cleanly:
+
+| Workbook | Tab | Symptom without hint | Likely fix |
+|---|---|---|---|
+| Disponibilidade | `MENSAL` | `row_count=0` (envelope/workbook); legacy returns `[{},{},...]`. | `?range=A5:Z` (known-working). |
+| Controle | `ℹ️ FORMAÇÕES` | Single header `"0"`, all rows truncated to width 1. Indicates row 1 has only column A populated; the real header lives below a banner. | Probe with `?range=A1:Z20` then `A3:AZ30`, `A5:AZ40`, `A10:AZ60` to find the header row, then pin via `?headerRow=N` or `?range=A<N>:AZ`. |
+| Controle | `ℹ️ DAT` | Header row 1 reads with 21 columns but 2 leading empties + visual `⬆️` separators + duplicate `Obs` at the end. Density ~71% — many cells are structurally blank. | The header IS on row 1, but the layout has visual gap and separator columns. Either pin `?range=` to the data columns (e.g. `C1:U`) or accept the blanks and let the consumer ignore `__col_*` keys (see `buildValueKeys` for the renaming rule). |
+
+The repo ships a metrics-only probe (`packages/api/scripts/probe-sheet.ts`,
+also exposed as `npm run probe:sheet -w packages/api`) to iterate over
+candidate ranges and `headerRow` values without ever printing cell
+content. Use it to lock in the right hint for new matrix-shaped tabs
+before adding them to the consumer's config.
+
 ## Value rendering — `?render=` and `?dateTime=`
 
 Two opt-in params forward directly to Google's `valueRenderOption` and
