@@ -8,6 +8,16 @@ updates:
       time: "09:00"
       timezone: America/Sao_Paulo
     open-pull-requests-limit: 5
+    ignore:
+      # Prisma 7 is a breaking change: `url` moves out of `schema.prisma` into
+      # `prisma.config.ts`, and `PrismaClient` requires a driver adapter
+      # (e.g. `@prisma/adapter-pg`) at runtime. Closed PR #46 hit P1012 on
+      # `prisma generate` for this reason. Pin majors until the migration is
+      # done as a dedicated task; minor/patch within 6.x still flow through.
+      - dependency-name: "@prisma/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "prisma"
+        update-types: ["version-update:semver-major"]
     groups:
       # Coordinate Prisma updates — `@prisma/client` and `prisma` (CLI) must
       # be on the same major or `prisma generate` fails. Catches all bump
