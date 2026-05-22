@@ -22,6 +22,7 @@ import { webhookRoutes } from './routes/dashboard/webhooks.js';
 import { auth2faRoutes } from './routes/auth-2fa.js';
 import { logsStreamRoutes } from './routes/dashboard/logs-stream.js';
 import { flushAuditLog } from './services/audit.service.js';
+import { flushUsageLog } from './services/usage.service.js';
 import { computedFieldRoutes } from './routes/dashboard/computed-fields.js';
 import { snapshotRoutes } from './routes/dashboard/snapshots.js';
 import { scheduledSyncRoutes } from './routes/dashboard/scheduled-sync.js';
@@ -166,6 +167,7 @@ app.get('/health', async () => ({ status: 'ok' }));
 // Graceful shutdown
 app.addHook('onClose', async () => {
   await flushAuditLog();
+  await flushUsageLog();
   await closeSheetsWriteWorker();
   await closeWebhookDeliveryWorker();
   await closeScheduledSyncWorker();
