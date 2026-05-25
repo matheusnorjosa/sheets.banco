@@ -8,8 +8,8 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
+  id           String  @id @default(cuid())
+  email        String  @unique
   passwordHash String
   name         String?
 
@@ -23,16 +23,16 @@ model User {
   totpEnabled   Boolean  @default(false)
   recoveryCodes String[] // bcrypt hashes
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  sheetApis    SheetApi[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  sheetApis SheetApi[]
 }
 
 model SheetApi {
-  id            String   @id @default(cuid())
+  id            String  @id @default(cuid())
   name          String
   spreadsheetId String
-  slug          String?  @unique
+  slug          String? @unique
 
   // Owner
   userId String?
@@ -45,11 +45,11 @@ model SheetApi {
   allowDelete Boolean @default(true)
 
   // Auth (opt-in)
-  bearerToken         String?   @unique
-  bearerTokenPrevious String?
+  bearerToken          String?   @unique
+  bearerTokenPrevious  String?
   bearerTokenRotatedAt DateTime?
-  basicUser           String?
-  basicPass           String?
+  basicUser            String?
+  basicPass            String?
 
   // HMAC Request Signing
   hmacSecret     String?
@@ -58,20 +58,20 @@ model SheetApi {
   // Security
   corsOrigins  String?
   ipWhitelist  String?
-  rateLimitRpm Int    @default(60)
+  rateLimitRpm Int     @default(60)
 
   // Cache
   cacheTtlSeconds Int @default(60)
 
   // Scheduled Sync
-  syncEnabled  Boolean @default(false)
-  syncCron     String? // cron expression, e.g. "*/15 * * * *"
+  syncEnabled Boolean @default(false)
+  syncCron    String? // cron expression, e.g. "*/15 * * * *"
 
   // Auto-snapshot
   autoSnapshotOnWrite Boolean @default(false)
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   apiKeys              ApiKey[]
   usageLogs            UsageLog[]
@@ -80,19 +80,23 @@ model SheetApi {
   computedFields       ComputedField[]
   snapshots            Snapshot[]
   additionalSheets     AdditionalSheet[]
+
+  @@index([userId])
 }
 
 model ApiKey {
-  id         String   @id @default(cuid())
-  key        String   @unique @default(cuid())
+  id         String    @id @default(cuid())
+  key        String    @unique @default(cuid())
   sheetApiId String
-  sheetApi   SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
+  sheetApi   SheetApi  @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
   label      String?
-  scopes     String[] @default(["sheets:read", "sheets:write", "sheets:delete"])
-  active     Boolean  @default(true)
+  scopes     String[]  @default(["sheets:read", "sheets:write", "sheets:delete"])
+  active     Boolean   @default(true)
   expiresAt  DateTime?
   lastUsedAt DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
+
+  @@index([sheetApiId])
 }
 
 model UsageLog {
@@ -110,20 +114,21 @@ model UsageLog {
 }
 
 model AuditLog {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   actorId      String
-  action       String   // "api.created", "api.deleted", "settings.updated", etc.
-  resourceType String   // "SheetApi", "ApiKey", "User"
+  action       String // "api.created", "api.deleted", "settings.updated", etc.
+  resourceType String // "SheetApi", "ApiKey", "User"
   resourceId   String
   sheetApiId   String?
   sheetApi     SheetApi? @relation(fields: [sheetApiId], references: [id], onDelete: SetNull)
   changes      Json?
   ip           String?
   userAgent    String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
   @@index([actorId, createdAt])
   @@index([resourceType, resourceId])
+  @@index([sheetApiId])
 }
 
 model WebhookSubscription {
@@ -137,18 +142,20 @@ model WebhookSubscription {
   createdAt  DateTime @default(now())
 
   deliveries WebhookDelivery[]
+
+  @@index([sheetApiId])
 }
 
 model WebhookDelivery {
-  id             String   @id @default(cuid())
+  id             String              @id @default(cuid())
   subscriptionId String
   subscription   WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   event          String
   payload        Json
-  status         String   @default("pending")
-  attempts       Int      @default(0)
+  status         String              @default("pending")
+  attempts       Int                 @default(0)
   responseCode   Int?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime            @default(now())
 
   @@index([subscriptionId, createdAt])
 }
@@ -157,8 +164,8 @@ model ComputedField {
   id         String   @id @default(cuid())
   sheetApiId String
   sheetApi   SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
-  name       String   // virtual field name
-  expression String   // e.g. "{{firstName}} {{lastName}}" or "{{price}} * {{quantity}}"
+  name       String // virtual field name
+  expression String // e.g. "{{firstName}} {{lastName}}" or "{{price}} * {{quantity}}"
   createdAt  DateTime @default(now())
 
   @@unique([sheetApiId, name])
@@ -169,7 +176,7 @@ model Snapshot {
   sheetApiId String
   sheetApi   SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
   version    Int
-  data       Json     // full sheet data at snapshot time
+  data       Json // full sheet data at snapshot time
   headers    String[] // column names at snapshot time
   rowCount   Int
   sheetName  String?
@@ -184,7 +191,7 @@ model AdditionalSheet {
   sheetApiId    String
   sheetApi      SheetApi @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
   spreadsheetId String
-  label         String   // friendly name for this additional spreadsheet
+  label         String // friendly name for this additional spreadsheet
   createdAt     DateTime @default(now())
 
   @@unique([sheetApiId, spreadsheetId])
