@@ -21,7 +21,7 @@
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.5",
     "bcrypt": "^6.0.0",
-    "bullmq": "^5.76.10",
+    "bullmq": "^5.77.3",
     "csv-parse": "^6.2.1",
     "fastify": "^5.8.4",
     "fastify-plugin": "^5.1.0",
@@ -36,10 +36,10 @@
     "@types/bcrypt": "^6.0.0",
     "@types/ioredis": "^5.0.0",
     "@types/json2csv": "^5.0.7",
-    "@types/node": "^25.9.0",
+    "@types/node": "^25.9.1",
     "@types/qrcode": "^1.5.6",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.7"
   }
 }
