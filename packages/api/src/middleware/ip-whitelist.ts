@@ -6,7 +6,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
  * null/undefined → all IPs allowed.
  */
 export async function apiIpWhitelist(request: FastifyRequest, reply: FastifyReply) {
-  const sheetApi = (request as any).sheetApi as { ipWhitelist?: string | null } | undefined;
+  const sheetApi = request.sheetApi;
   if (!sheetApi || !sheetApi.ipWhitelist) return;
 
   const allowed = sheetApi.ipWhitelist.split(',').map((ip) => ip.trim());

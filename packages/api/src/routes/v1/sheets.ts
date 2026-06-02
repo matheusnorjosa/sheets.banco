@@ -111,7 +111,7 @@ export async function sheetsRoutes(app: FastifyInstance) {
       throw new NotFoundError('API not found. Check your API ID or slug.');
     }
 
-    (request as any).sheetApi = sheetApi;
+    request.sheetApi = sheetApi;
   });
 
   // Per-API security: CORS, IP whitelist, auth, HMAC

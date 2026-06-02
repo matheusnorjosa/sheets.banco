@@ -1,31 +1,32 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 
 /**
  * Register global rate limiting with per-API overrides.
  * Each SheetApi has a configurable `rateLimitRpm`.
  * The key is API ID + client IP so limits are scoped per consumer per API.
+ *
+ * When Redis is available (`app.redis !== null`) the limiter uses the shared
+ * store so counters stay coherent across multiple instances. Without Redis it
+ * falls back to in-process memory (fine for single-instance dev).
  */
 export async function registerRateLimiter(app: FastifyInstance) {
   await app.register(rateLimit, {
     global: false, // only apply where explicitly enabled
+    redis: app.redis ?? undefined,
   });
 }
 
 /**
  * Per-route rate limit config generator.
- * Use as route-level config: { config: { rateLimit: getApiRateLimit(request) } }
+ * Use as route-level config: { config: { rateLimit: apiRateLimitOptions() } }
  */
 export function apiRateLimitOptions() {
   return {
-    max: (request: any) => {
-      const sheetApi = request.sheetApi;
-      return sheetApi?.rateLimitRpm ?? 60;
-    },
+    max: (request: FastifyRequest) => request.sheetApi?.rateLimitRpm ?? 60,
     timeWindow: '1 minute',
-    keyGenerator: (request: any) => {
-      const sheetApi = request.sheetApi;
-      const apiId = sheetApi?.id ?? 'global';
+    keyGenerator: (request: FastifyRequest) => {
+      const apiId = request.sheetApi?.id ?? 'global';
       return `${apiId}:${request.ip}`;
     },
   };
@@ -42,7 +43,7 @@ export function authRateLimitOptions() {
     global: true,
     max: 10,
     timeWindow: '1 minute',
-    keyGenerator: (request: any) => `auth:${request.ip}`,
+    keyGenerator: (request: FastifyRequest) => `auth:${request.ip}`,
   };
 }
 
@@ -55,7 +56,7 @@ export function dashboardRateLimitOptions() {
     global: true,
     max: 60,
     timeWindow: '1 minute',
-    keyGenerator: (request: any) => {
+    keyGenerator: (request: FastifyRequest) => {
       const userId = (request.user as { sub?: string } | undefined)?.sub;
       return userId ? `dashboard:user:${userId}` : `dashboard:ip:${request.ip}`;
     },

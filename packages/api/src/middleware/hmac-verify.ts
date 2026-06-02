@@ -1,11 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'node:crypto';
 
-interface SheetApiHmac {
-  hmacSecret: string | null;
-  requireSigning: boolean;
-}
-
 const MAX_TIMESTAMP_DRIFT_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -17,7 +12,7 @@ const MAX_TIMESTAMP_DRIFT_MS = 5 * 60 * 1000; // 5 minutes
  * - X-Timestamp: Unix timestamp (seconds)
  */
 export async function hmacVerify(request: FastifyRequest, reply: FastifyReply) {
-  const sheetApi = (request as any).sheetApi as SheetApiHmac | undefined;
+  const sheetApi = request.sheetApi;
   if (!sheetApi || !sheetApi.requireSigning || !sheetApi.hmacSecret) return;
 
   const signature = request.headers['x-signature'] as string | undefined;

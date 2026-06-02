@@ -42,7 +42,7 @@ export async function importExportRoutes(app: FastifyInstance) {
       sheetApi = await prisma.sheetApi.findUnique({ where: { slug: apiId } });
     }
     if (!sheetApi) throw new NotFoundError('API not found.');
-    (request as any).sheetApi = sheetApi;
+    request.sheetApi = sheetApi;
   });
 
   app.addHook('onRequest', apiCors);
