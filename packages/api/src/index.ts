@@ -31,11 +31,12 @@ import { initScheduledSyncQueue } from './queues/scheduled-sync.queue.js';
 import { initScheduledSyncWorker, closeScheduledSyncWorker } from './workers/scheduled-sync.worker.js';
 
 const app = Fastify({
-  logger: {
-    level: env.LOG_LEVEL,
-  },
-  bodyLimit: 1_048_576, // 1MB
+  logger: { level: env.LOG_LEVEL },
+  bodyLimit: env.BODY_LIMIT,
   trustProxy: true,
+  // Echo `X-Request-Id` so support flows can correlate logs ↔ client reports.
+  requestIdHeader: 'x-request-id',
+  genReqId: (req) => (req.headers['x-request-id'] as string) || `req_${Math.random().toString(36).slice(2, 12)}`,
 });
 
 // Redis plugin
@@ -47,11 +48,18 @@ app.register(helmet, {
   crossOriginEmbedderPolicy: false,
 });
 
-// Global CORS for dashboard/auth routes (sheet routes handle CORS per-API)
+// Global CORS for dashboard/auth routes (sheet routes handle CORS per-API).
+// Allowlist comes from env.ALLOWED_ORIGINS (comma-separated). Falls back to
+// FRONTEND_URL. Reflecting any origin with credentials enabled is a CSRF foot-
+// gun — kept strict here.
+const corsOrigins = env.ALLOWED_ORIGINS
+  ? env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  : [env.FRONTEND_URL];
 app.register(cors, {
-  origin: true,
+  origin: corsOrigins,
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+  exposedHeaders: ['X-Request-Id'],
   credentials: true,
 });
 
@@ -84,36 +92,44 @@ app.register(fastifyJwt, {
   sign: { expiresIn: '24h' },
 });
 
-// Global error handler
+// Global error handler. Echoes `request_id` on every error response so support
+// can correlate client-reported failures with server logs.
 app.setErrorHandler((error: Error, request, reply) => {
+  const requestId = request.id;
+  reply.header('X-Request-Id', requestId);
+
   if (error instanceof AppError) {
     return reply.status(error.statusCode).send({
       error: true,
       message: error.message,
       code: error.code,
       statusCode: error.statusCode,
+      request_id: requestId,
       ...(error.details && { details: error.details }),
     });
   }
 
+  const fastifyError = error as Error & { validation?: unknown; code?: string; statusCode?: number };
+
   // Rate limit errors
-  if ('statusCode' in error && (error as any).statusCode === 429) {
+  if (fastifyError.statusCode === 429) {
     return reply.status(429).send({
       error: true,
       message: 'Too many requests. Please slow down.',
       code: 'RATE_LIMIT_EXCEEDED',
       statusCode: 429,
+      request_id: requestId,
     });
   }
 
   // Fastify validation errors
-  const fastifyError = error as Error & { validation?: unknown; code?: string; statusCode?: number };
   if (fastifyError.validation) {
     return reply.status(400).send({
       error: true,
       message: error.message,
       code: 'VALIDATION_ERROR',
       statusCode: 400,
+      request_id: requestId,
     });
   }
 
@@ -129,15 +145,17 @@ app.setErrorHandler((error: Error, request, reply) => {
       message: error.message,
       code: fastifyError.code ?? 'CLIENT_ERROR',
       statusCode: fastifyError.statusCode,
+      request_id: requestId,
     });
   }
 
-  app.log.error(error);
+  app.log.error({ err: error, request_id: requestId }, 'Unhandled error');
   return reply.status(500).send({
     error: true,
     message: 'Internal server error',
     code: 'INTERNAL_ERROR',
     statusCode: 500,
+    request_id: requestId,
   });
 });
 

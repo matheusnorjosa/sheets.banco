@@ -7,7 +7,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
  * - comma-separated list → only those origins allowed
  */
 export async function apiCors(request: FastifyRequest, reply: FastifyReply) {
-  const sheetApi = (request as any).sheetApi as { corsOrigins?: string | null } | undefined;
+  const sheetApi = request.sheetApi;
   if (!sheetApi) return;
 
   const origin = request.headers.origin ?? '';

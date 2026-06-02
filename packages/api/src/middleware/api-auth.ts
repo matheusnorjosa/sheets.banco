@@ -1,21 +1,27 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-
-interface SheetApiAuth {
-  bearerToken: string | null;
-  bearerTokenPrevious: string | null;
-  bearerTokenRotatedAt: Date | null;
-  basicUser: string | null;
-  basicPass: string | null;
-}
+import crypto from 'node:crypto';
 
 const GRACE_PERIOD_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Constant-time equality for ASCII/UTF-8 strings. `===` short-circuits on the
+ * first mismatched byte, leaking length and prefix information through timing
+ * — irrelevant over jittery TLS in practice, but the right primitive at the
+ * crypto boundary. Mirrors the comparison already used in hmac-verify.ts.
+ */
+function equalConstantTime(a: string, b: string): boolean {
+  const ba = Buffer.from(a, 'utf8');
+  const bb = Buffer.from(b, 'utf8');
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
 
 /**
  * Middleware that checks per-API auth (bearer token or basic auth).
  * Supports token rotation with a 1-hour grace period for the previous token.
  */
 export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
-  const sheetApi = (request as any).sheetApi as SheetApiAuth | undefined;
+  const sheetApi = request.sheetApi;
   if (!sheetApi) return;
 
   const hasBearerAuth = !!sheetApi.bearerToken;
@@ -31,13 +37,13 @@ export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
     const token = authHeader.slice(7);
 
     // Check current token
-    if (token === sheetApi.bearerToken) return;
+    if (sheetApi.bearerToken && equalConstantTime(token, sheetApi.bearerToken)) return;
 
     // Check previous token (grace period)
     if (
       sheetApi.bearerTokenPrevious &&
-      token === sheetApi.bearerTokenPrevious &&
-      sheetApi.bearerTokenRotatedAt
+      sheetApi.bearerTokenRotatedAt &&
+      equalConstantTime(token, sheetApi.bearerTokenPrevious)
     ) {
       const elapsed = Date.now() - sheetApi.bearerTokenRotatedAt.getTime();
       if (elapsed < GRACE_PERIOD_MS) return;
@@ -47,8 +53,19 @@ export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
   // Try Basic auth
   if (hasBasicAuth && authHeader.startsWith('Basic ')) {
     const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf-8');
-    const [user, pass] = decoded.split(':');
-    if (user === sheetApi.basicUser && pass === sheetApi.basicPass) return;
+    const sep = decoded.indexOf(':');
+    if (sep > 0) {
+      const user = decoded.slice(0, sep);
+      const pass = decoded.slice(sep + 1);
+      if (
+        sheetApi.basicUser &&
+        sheetApi.basicPass &&
+        equalConstantTime(user, sheetApi.basicUser) &&
+        equalConstantTime(pass, sheetApi.basicPass)
+      ) {
+        return;
+      }
+    }
   }
 
   return reply.status(401).send({

@@ -7,7 +7,7 @@ import { enqueueUsageLog } from '../services/usage.service.js';
  */
 export function registerUsageLogger(app: FastifyInstance) {
   app.addHook('onResponse', async (request, reply) => {
-    const sheetApi = (request as any).sheetApi;
+    const sheetApi = request.sheetApi;
     if (!sheetApi) return;
 
     enqueueUsageLog({
