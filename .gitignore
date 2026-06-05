@@ -2,6 +2,8 @@ node_modules/
 dist/
 .env
 .env.*
+!.env.example
+!.env.*.example
 *.log
 .DS_Store
 coverage/
@@ -21,7 +23,6 @@ aprender.json
 docker-compose.yml
 render.yaml
 railway.toml
-.env.example
 
 # Internal planning docs (not for GitHub)
 docs/PLANO-MELHORIAS.md
@@ -30,3 +31,9 @@ docs/prompt.md
 # Generated
 packages/web/public/*.svg
 packages/web/src/app/favicon.ico
+
+# Local data: snapshots dos JSONs das planilhas, Excels FULL/REDACTED, aliases,
+# scripts ad-hoc em /tmp e o env file com API keys. Contém PII (CPF/email/
+# telefone) e credenciais de produção. Mantido localmente para preservação
+# após cleanup do C:\tmp\ — nunca commitar.
+/_local_data/
