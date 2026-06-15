@@ -1,7 +1,7 @@
 import type { EnvelopeRecord } from '../../envelope/build.js';
 import type { NormalizedEvento } from '../../normalize/types/eventos.js';
 import type { NormalizedAgenda } from '../../normalize/types/agenda.js';
-import type { TargetAgendaSolicitacoes, TargetRecord, TargetIssue } from './types.js';
+import type { TargetRecord, TargetIssue } from './types.js';
 import { buildReviewRecord } from './review.js';
 
 const CRITICAL_REVIEW_CODES = new Set([

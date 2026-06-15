@@ -38,7 +38,7 @@ export async function withTransientRetry<T>(
       const code = (err as { code?: string })?.code;
       if (!code || !TRANSIENT_CODES.has(code)) throw err;
       if (i === attempts - 1) break;
-      await new Promise((r) => setTimeout(r, baseMs * Math.pow(2, i)));
+      await new Promise((resolve) => setTimeout(resolve, baseMs * Math.pow(2, i)));
     }
   }
   throw lastErr;

@@ -1,5 +1,3 @@
-import type IORedis from 'ioredis';
-
 let redis: InstanceType<typeof import('ioredis').default> | null = null;
 
 /**

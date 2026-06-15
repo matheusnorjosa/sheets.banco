@@ -1,6 +1,6 @@
 import type { EnvelopeRecord } from '../../envelope/build.js';
 import type { NormalizedProduto } from '../../normalize/types/produtos.js';
-import type { TargetProdutosControle, TargetRecord, TargetIssue } from './types.js';
+import type { TargetRecord, TargetIssue } from './types.js';
 import { buildReviewRecord } from './review.js';
 
 export function adaptProdutosControleRecord(rec: EnvelopeRecord): TargetRecord {

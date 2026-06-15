@@ -24,6 +24,9 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate --schema prisma/schema.prisma
 
+      - name: Lint API
+        run: npm run lint -w packages/api -- --max-warnings 50
+
       - name: Typecheck API
         run: npm run typecheck -w packages/api
 
