@@ -18,8 +18,8 @@ export function parseDateBR(input: unknown): string | null {
   // dd/mm/yyyy or dd-mm-yyyy or dd.mm.yyyy
   const brMatch = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
   if (brMatch) {
-    let [, d, m, y] = brMatch;
-    if (y.length === 2) y = (Number(y) > 50 ? '19' : '20') + y;
+    const [, d, m, yRaw] = brMatch;
+    const y = yRaw.length === 2 ? (Number(yRaw) > 50 ? '19' : '20') + yRaw : yRaw;
     const dn = Number(d);
     const mn = Number(m);
     const yn = Number(y);

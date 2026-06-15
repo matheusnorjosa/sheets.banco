@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 
 export async function jwtAuth(request: FastifyRequest, reply: FastifyReply) {
   try {

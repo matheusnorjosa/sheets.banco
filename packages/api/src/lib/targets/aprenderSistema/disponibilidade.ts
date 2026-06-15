@@ -1,6 +1,6 @@
 import type { EnvelopeRecord } from '../../envelope/build.js';
 import type { NormalizedBloqueio } from '../../normalize/types/bloqueios.js';
-import type { TargetDisponibilidadeBloqueios, TargetRecord, TargetIssue } from './types.js';
+import type { TargetRecord, TargetIssue } from './types.js';
 import { buildReviewRecord } from './review.js';
 
 /**

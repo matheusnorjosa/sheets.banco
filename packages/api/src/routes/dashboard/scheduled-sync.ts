@@ -7,7 +7,7 @@ import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import { updateSyncSchedule, removeSyncSchedule } from '../../queues/scheduled-sync.queue.js';
 import { invalidateSheetApiCache } from '../../services/sheet-api-cache.service.js';
 
-const cronRegex = /^(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)\s+(\*|[0-9,\-\/]+)$/;
+const cronRegex = /^(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)$/;
 
 const updateSyncSchema = z.object({
   syncEnabled: z.boolean(),

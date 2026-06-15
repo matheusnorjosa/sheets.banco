@@ -1,6 +1,6 @@
 import type { EnvelopeRecord } from '../../envelope/build.js';
 import type { NormalizedUser } from '../../normalize/types/users.js';
-import type { TargetUsuarios, TargetRecord, TargetIssue } from './types.js';
+import type { TargetRecord, TargetIssue } from './types.js';
 import { buildReviewRecord } from './review.js';
 
 /**

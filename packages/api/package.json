@@ -11,7 +11,9 @@
     "seed": "tsx scripts/seed.ts",
     "probe:sheet": "tsx scripts/probe-sheet.ts",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
@@ -34,14 +36,19 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/bcrypt": "^6.0.0",
-    "@types/ioredis": "^5.0.0",
     "@types/json2csv": "^5.0.7",
     "@types/node": "^25.9.3",
     "@types/qrcode": "^1.5.6",
     "@vitest/coverage-v8": "^4.1.9",
+    "eslint": "^9.39.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-promise": "^7.3.0",
+    "eslint-plugin-security": "^4.0.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.0",
     "vitest": "^4.1.8"
   }
 }
