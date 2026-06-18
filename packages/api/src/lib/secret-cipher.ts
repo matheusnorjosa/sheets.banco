@@ -24,7 +24,6 @@ import crypto from 'node:crypto';
  */
 
 const PREFIX = 'gcm$';
-const KEY_BYTES = 32;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 
