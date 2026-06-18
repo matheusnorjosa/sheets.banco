@@ -27,8 +27,10 @@ import { computedFieldRoutes } from './routes/dashboard/computed-fields.js';
 import { snapshotRoutes } from './routes/dashboard/snapshots.js';
 import { scheduledSyncRoutes } from './routes/dashboard/scheduled-sync.js';
 import { multiSpreadsheetRoutes } from './routes/dashboard/multi-spreadsheet.js';
-import { initScheduledSyncQueue } from './queues/scheduled-sync.queue.js';
+import { initScheduledSyncQueue, updateSyncSchedule } from './queues/scheduled-sync.queue.js';
 import { initScheduledSyncWorker, closeScheduledSyncWorker } from './workers/scheduled-sync.worker.js';
+import { schemaRoutes } from './routes/v1/schema.js';
+import { prisma } from './lib/prisma.js';
 
 const app = Fastify({
   logger: { level: env.LOG_LEVEL },
@@ -177,7 +179,7 @@ app.register(scheduledSyncRoutes, { prefix: '/dashboard/apis' });
 app.register(multiSpreadsheetRoutes, { prefix: '/dashboard/apis' });
 app.register(sheetsRoutes, { prefix: '/api/v1' });
 app.register(importExportRoutes, { prefix: '/api/v1' });
-app.register((await import('./routes/v1/schema.js')).schemaRoutes, { prefix: '/api/v1' });
+app.register(schemaRoutes, { prefix: '/api/v1' });
 
 // Health check
 app.get('/health', async () => ({ status: 'ok' }));
@@ -216,8 +218,6 @@ const start = async () => {
     }
 
     // Restore scheduled sync jobs from database
-    const { prisma } = await import('./lib/prisma.js');
-    const { updateSyncSchedule } = await import('./queues/scheduled-sync.queue.js');
     const syncApis = await prisma.sheetApi.findMany({
       where: { syncEnabled: true, syncCron: { not: null } },
       select: { id: true, syncCron: true, userId: true, spreadsheetId: true },
