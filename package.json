@@ -18,7 +18,7 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "seed": "npm run seed -w packages/api",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "engines": {
     "node": ">=18.0.0"
