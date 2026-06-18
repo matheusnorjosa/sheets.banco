@@ -17,12 +17,15 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "seed": "npm run seed -w packages/api"
+    "seed": "npm run seed -w packages/api",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7",
     "prisma": "^6.19.3"
   },
   "dependencies": {
@@ -33,5 +36,10 @@
     "next": {
       "postcss": "^8.5.10"
     }
+  },
+  "lint-staged": {
+    "packages/api/**/*.ts": [
+      "npm run lint -w packages/api -- --fix"
+    ]
   }
 }
