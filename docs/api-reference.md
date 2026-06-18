@@ -166,15 +166,20 @@ curl -u user:password http://localhost:3000/api/v1/clx123
 
 If no auth is configured on the API, endpoints are public.
 
+**HMAC request signing:** APIs with `requireSigning` enabled additionally need an `X-Signature` + `X-Timestamp` pair on every request. See [docs/hmac-signing.md](./hmac-signing.md) for the canonical-string spec, version flags (`X-Signature-Version: 2` for raw-body), and worked examples in curl / Node / Python / Go.
+
 ## Error Response Format
 
-All errors follow this format:
+All errors follow the envelope in [docs/error-handling.md](./error-handling.md). Summary:
 
 ```json
 {
   "error": true,
   "message": "Description of the error",
   "code": "ERROR_CODE",
-  "statusCode": 404
+  "statusCode": 404,
+  "request_id": "req_a1b2c3d4e5"
 }
 ```
+
+Quote `request_id` when reporting bugs — it's the same value as the `X-Request-Id` response header and lets maintainers correlate against server logs.

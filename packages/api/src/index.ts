@@ -4,6 +4,7 @@ import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import rawBody from 'fastify-raw-body';
 import { env } from './config/env.js';
 import { AppError } from './lib/errors.js';
 import { sheetsRoutes } from './routes/v1/sheets.js';
@@ -39,6 +40,18 @@ const app = Fastify({
   // Echo `X-Request-Id` so support flows can correlate logs ↔ client reports.
   requestIdHeader: 'x-request-id',
   genReqId: (req) => (req.headers['x-request-id'] as string) || `req_${Math.random().toString(36).slice(2, 12)}`,
+});
+
+// Capture raw request bytes so the HMAC middleware (X-Signature-Version: 2)
+// can sign the exact payload the client sent — independent of how Fastify's
+// JSON parser re-serializes the object. Required for cross-language signing
+// (Go/Python clients otherwise fail v1's JSON.stringify-based canonical).
+// `global: true` populates request.rawBody on every route; cap is bodyLimit.
+app.register(rawBody, {
+  field: 'rawBody',
+  global: true,
+  encoding: 'utf8',
+  runFirst: true,
 });
 
 // Redis plugin
