@@ -22,6 +22,14 @@ const envSchema = z.object({
    * hardcoded value; bump (e.g. 25 MiB) when importing large CSVs.
    */
   BODY_LIMIT: z.coerce.number().int().positive().default(1_048_576),
+  /**
+   * Master key for the at-rest secret cipher (AES-256-GCM) used by
+   * `lib/secret-cipher.ts`. 64 hex chars (32 bytes). Required in production
+   * once the encrypted-column migration starts; optional in dev/test so the
+   * unit suite that doesn't touch encrypted fields keeps running without it.
+   * Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+   */
+  SECRETS_ENC_KEY: z.string().regex(/^[0-9a-f]{64}$/i, 'must be 64 hex chars').optional(),
 }).superRefine((env, ctx) => {
   if (env.NODE_ENV === 'production') {
     if (env.JWT_SECRET.length < 32) {
@@ -38,6 +46,9 @@ const envSchema = z.object({
         message: 'must be set in production (comma-separated list)',
       });
     }
+    // SECRETS_ENC_KEY becomes mandatory in prod once #62 Phase B migration
+    // lands. Currently soft-required so the existing prod environment doesn't
+    // fail to boot before the migration is applied.
   }
 });
 
