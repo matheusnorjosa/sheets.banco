@@ -3,6 +3,9 @@ import type { SheetWriteJobData, SheetWriteResult } from '../queues/sheets-write
 import * as sheetsService from '../services/google-sheets.service.js';
 import { dispatchWebhooks } from '../services/webhook.service.js';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
+
+const log = logger.child({ component: 'worker:sheets-write' });
 
 let worker: Worker<SheetWriteJobData, SheetWriteResult> | null = null;
 
@@ -95,13 +98,19 @@ export function initSheetsWriteWorker(redisUrl: string): Worker<SheetWriteJobDat
 
   worker.on('completed', (job) => {
     if (job) {
-      console.log(`[sheets-write] Job ${job.id} completed:`, job.returnvalue);
+      log.info(
+        { jobId: job.id, type: job.name, result: job.returnvalue },
+        'Job completed',
+      );
     }
   });
 
   worker.on('failed', (job, err) => {
     if (job) {
-      console.error(`[sheets-write] Job ${job.id} failed (attempt ${job.attemptsMade}):`, err.message);
+      log.error(
+        { jobId: job.id, type: job.name, attempt: job.attemptsMade, err: err.message },
+        'Job failed',
+      );
     }
   });
 

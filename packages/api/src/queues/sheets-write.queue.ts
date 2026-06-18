@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import type { SheetRow } from '../services/google-sheets.service.js';
+import { buildJobOptions } from '../lib/queue-options.js';
 
 export interface SheetWriteJobData {
   type: 'append' | 'update' | 'delete' | 'clear';
@@ -30,15 +31,12 @@ export function initSheetsWriteQueue(redisUrl: string): Queue<SheetWriteJobData,
       port: Number(url.port) || 6379,
       password: url.password || undefined,
     },
-    defaultJobOptions: {
-      attempts: 5,
-      backoff: {
-        type: 'exponential',
-        delay: 2000, // 2s, 4s, 8s, 16s, 32s
-      },
+    // Override removeOnFail: writes touch user data; we want a longer trail
+    // for incident replay even at the cost of Redis memory.
+    defaultJobOptions: buildJobOptions({
       removeOnComplete: { count: 1000 },
       removeOnFail: { count: 5000 },
-    },
+    }),
   });
   return queue;
 }

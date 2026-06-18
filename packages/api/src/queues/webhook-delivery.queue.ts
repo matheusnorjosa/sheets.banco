@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq';
+import { buildJobOptions } from '../lib/queue-options.js';
 
 export interface WebhookDeliveryJobData {
   subscriptionId: string;
@@ -18,15 +19,13 @@ export function initWebhookDeliveryQueue(redisUrl: string): Queue<WebhookDeliver
       port: Number(url.port) || 6379,
       password: url.password || undefined,
     },
-    defaultJobOptions: {
-      attempts: 5,
-      backoff: {
-        type: 'exponential',
-        delay: 10000, // 10s, 20s, 40s, 80s, 160s
-      },
-      removeOnComplete: { count: 500 },
+    // Longer backoff (10s base → ~310s total) — third-party webhook targets
+    // are commonly down for >1min during their own incidents; aggressive
+    // retries just amplify the spike.
+    defaultJobOptions: buildJobOptions({
+      backoff: { type: 'exponential', delay: 10000 },
       removeOnFail: { count: 2000 },
-    },
+    }),
   });
   return queue;
 }
