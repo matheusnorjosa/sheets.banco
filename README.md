@@ -10,7 +10,7 @@ Turn Google Sheets into REST APIs. Connect a spreadsheet, get an API endpoint, a
 - **Multi-tab support** — Access any worksheet tab via `?sheet=` param
 - **Google OAuth** — Sign in with Google and access your sheets directly
 - **Dashboard** — Web UI to manage APIs, settings, API keys, and usage stats
-- **Per-API Security** — Rate limiting, CORS config, IP whitelist, bearer token auth
+- **Per-API Security** — Rate limiting, CORS config, IP whitelist, bearer token auth, [HMAC request signing](./docs/hmac-signing.md)
 - **In-memory Cache** — Configurable TTL per API, auto-invalidated on writes
 - **Formula Injection Protection** — Sanitizes cell values on writes
 - **JavaScript SDK** — Zero-dependency typed client for browser and Node.js

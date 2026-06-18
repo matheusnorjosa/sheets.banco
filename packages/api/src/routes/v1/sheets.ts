@@ -114,11 +114,15 @@ export async function sheetsRoutes(app: FastifyInstance) {
     request.sheetApi = sheetApi;
   });
 
-  // Per-API security: CORS, IP whitelist, auth, HMAC
+  // Per-API security: CORS, IP whitelist, auth at onRequest (body not parsed
+  // yet, which is fine — they only need headers + the resolved sheetApi).
   app.addHook('onRequest', apiCors);
   app.addHook('onRequest', apiIpWhitelist);
   app.addHook('onRequest', apiAuth);
-  app.addHook('onRequest', hmacVerify);
+  // HMAC runs at preHandler so request.body is parsed and request.rawBody
+  // (captured by fastify-raw-body) is available. v2 signs raw bytes; v1
+  // signs JSON.stringify(body). See middleware/hmac-verify.ts.
+  app.addHook('preHandler', hmacVerify);
 
   // GET /:apiId — return all rows (with pagination)
   // Supports ?version=N to return snapshot data

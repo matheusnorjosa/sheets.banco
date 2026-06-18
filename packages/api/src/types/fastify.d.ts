@@ -9,6 +9,13 @@ import type { SheetApi } from '../services/sheet-api-cache.service.js';
 declare module 'fastify' {
   interface FastifyRequest {
     sheetApi?: SheetApi;
+    /**
+     * Raw request body bytes captured by `fastify-raw-body`. Used by
+     * `hmac-verify` middleware for `X-Signature-Version: 2`, which signs the
+     * exact bytes the client sent (independent of JSON serializer behavior).
+     * Undefined for routes that don't enable rawBody capture.
+     */
+    rawBody?: string | Buffer;
   }
 }
 
