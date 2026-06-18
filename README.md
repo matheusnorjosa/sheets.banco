@@ -15,6 +15,7 @@ Turn Google Sheets into REST APIs. Connect a spreadsheet, get an API endpoint, a
 - **Formula Injection Protection** — Sanitizes cell values on writes
 - **JavaScript SDK** — Zero-dependency typed client for browser and Node.js
 - **Usage Logging** — Track requests per API with method, status, response time
+- **Webhooks** — Subscribe to `row.created`/`updated`/`deleted`/`rows.cleared` events; signed, retried; see [docs/webhooks.md](./docs/webhooks.md)
 
 ## Tech Stack
 
@@ -106,6 +107,10 @@ npm run dev
 # Frontend (port 3001, in another terminal)
 npm run dev:web
 ```
+
+## Architecture
+
+For the topology, request flows, and where caches/queues live, see [docs/architecture.md](./docs/architecture.md).
 
 ## API Endpoints
 

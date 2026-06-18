@@ -36,6 +36,10 @@ To run the dashboard:
 npm run dev -w packages/web
 ```
 
+## Orientation
+
+New contributors: start with [docs/architecture.md](./docs/architecture.md) for the topology + request flows, then [docs/api-reference.md](./docs/api-reference.md) for the routes. Cross-cutting concerns: [error-handling](./docs/error-handling.md), [queues](./docs/queues.md), [hmac-signing](./docs/hmac-signing.md).
+
 ## Workflow
 
 1. **Branch from `main`** — name it `feat/<thing>` or `fix/<thing>` or `chore/<thing>`.
