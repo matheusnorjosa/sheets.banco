@@ -20,6 +20,8 @@ cd sheets.banco
 npm install
 ```
 
+`npm install` runs `husky` via the `prepare` script, which installs a `pre-commit` hook that lint-fixes staged `packages/api/**/*.ts` files and runs `typecheck` for the API package. Set `HUSKY=0` in your shell to bypass install. Per-commit bypass: `git commit --no-verify` — discouraged outside genuine emergencies (CI still runs the same gates).
+
 Required env vars: `DATABASE_URL`, `REDIS_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`. See `packages/api/src/config/env.ts` for defaults and all options.
 
 To run the API locally:
