@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq';
+import { buildJobOptions } from '../lib/queue-options.js';
 
 export interface SyncJobData {
   sheetApiId: string;
@@ -16,12 +17,12 @@ export function initScheduledSyncQueue(redisUrl: string): Queue<SyncJobData> {
       port: Number(url.port) || 6379,
       password: url.password || undefined,
     },
-    defaultJobOptions: {
+    // Fewer attempts — sync is repeatable; the next cron fire will re-do the
+    // invalidation anyway, so deep retry loops are wasteful.
+    defaultJobOptions: buildJobOptions({
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
-      removeOnComplete: { count: 500 },
-      removeOnFail: { count: 1000 },
-    },
+    }),
   });
   return queue;
 }

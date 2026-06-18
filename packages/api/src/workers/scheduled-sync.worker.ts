@@ -1,16 +1,18 @@
 import { Worker, type Job } from 'bullmq';
 import type { SyncJobData } from '../queues/scheduled-sync.queue.js';
 import { invalidateCache } from '../services/google-sheets.service.js';
+import { logger } from '../lib/logger.js';
+
+const log = logger.child({ component: 'worker:scheduled-sync' });
 
 let worker: Worker<SyncJobData> | null = null;
 
 async function processSync(job: Job<SyncJobData>): Promise<void> {
   const { spreadsheetId, sheetApiId } = job.data;
 
-  // Invalidate cache to force fresh fetch on next request
   await invalidateCache(spreadsheetId);
 
-  console.log(`[scheduled-sync] Cache invalidated for API ${sheetApiId} (spreadsheet ${spreadsheetId})`);
+  log.info({ sheetApiId, spreadsheetId, jobId: job.id }, 'Cache invalidated');
 }
 
 export function initScheduledSyncWorker(redisUrl: string): Worker<SyncJobData> {
@@ -31,13 +33,16 @@ export function initScheduledSyncWorker(redisUrl: string): Worker<SyncJobData> {
 
   worker.on('completed', (job) => {
     if (job) {
-      console.log(`[scheduled-sync] Job ${job.id} completed`);
+      log.info({ jobId: job.id, sheetApiId: job.data.sheetApiId }, 'Job completed');
     }
   });
 
   worker.on('failed', (job, err) => {
     if (job) {
-      console.error(`[scheduled-sync] Job ${job.id} failed:`, err.message);
+      log.error(
+        { jobId: job.id, sheetApiId: job.data?.sheetApiId, attempt: job.attemptsMade, err: err.message },
+        'Job failed',
+      );
     }
   });
 

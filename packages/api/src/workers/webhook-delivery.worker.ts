@@ -2,6 +2,9 @@ import { Worker, type Job } from 'bullmq';
 import crypto from 'node:crypto';
 import type { WebhookDeliveryJobData } from '../queues/webhook-delivery.queue.js';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
+
+const log = logger.child({ component: 'worker:webhook-delivery' });
 
 let worker: Worker<WebhookDeliveryJobData> | null = null;
 
@@ -78,7 +81,16 @@ export function initWebhookDeliveryWorker(redisUrl: string): Worker<WebhookDeliv
 
   worker.on('failed', (job, err) => {
     if (job) {
-      console.error(`[webhook] Delivery ${job.id} failed (attempt ${job.attemptsMade}):`, err.message);
+      log.error(
+        {
+          jobId: job.id,
+          subscriptionId: job.data.subscriptionId,
+          event: job.data.event,
+          attempt: job.attemptsMade,
+          err: err.message,
+        },
+        'Delivery failed',
+      );
     }
   });
 

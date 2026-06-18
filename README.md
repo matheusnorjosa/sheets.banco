@@ -17,6 +17,7 @@ Turn Google Sheets into REST APIs. Connect a spreadsheet, get an API endpoint, a
 - **Usage Logging** — Track requests per API with method, status, response time
 - **Webhooks** — Subscribe to `row.created`/`updated`/`deleted`/`rows.cleared` events; signed, retried; see [docs/webhooks.md](./docs/webhooks.md)
 - **Snapshots** — Point-in-time copies of sheet data, queryable via `?version=N`; see [docs/snapshots.md](./docs/snapshots.md)
+- **Background queues** — BullMQ workers for writes, webhooks, and scheduled sync; structured retry/backoff documented in [docs/queues.md](./docs/queues.md)
 
 ## Tech Stack
 
