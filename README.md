@@ -107,6 +107,10 @@ npm run dev
 npm run dev:web
 ```
 
+## Architecture
+
+For the topology, request flows, and where caches/queues live, see [docs/architecture.md](./docs/architecture.md).
+
 ## API Endpoints
 
 ### Sheet Data (public or protected per API)
