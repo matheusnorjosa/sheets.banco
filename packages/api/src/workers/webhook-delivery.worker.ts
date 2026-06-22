@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import type { WebhookDeliveryJobData } from '../queues/webhook-delivery.queue.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { decryptIfEncrypted } from '../lib/secret-cipher.js';
 
 const log = logger.child({ component: 'worker:webhook-delivery' });
 
@@ -13,8 +14,12 @@ async function processJob(job: Job<WebhookDeliveryJobData>): Promise<void> {
 
   const body = JSON.stringify(payload);
   const timestamp = Math.floor(Date.now() / 1000);
+  // The secret travels through Redis (BullMQ job payload). It's encrypted on
+  // disk and stays encrypted in transit; decrypt only at sign time so
+  // plaintext lives only in this worker's memory for the duration of the call.
+  const secretPlain = decryptIfEncrypted(secret);
   const signature = crypto
-    .createHmac('sha256', secret)
+    .createHmac('sha256', secretPlain)
     .update(`${timestamp}.${body}`)
     .digest('hex');
 

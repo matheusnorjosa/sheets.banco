@@ -8,6 +8,7 @@ import { jwtAuth } from '../../middleware/jwt-auth.js';
 import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 import { invalidateSheetApiCache } from '../../services/sheet-api-cache.service.js';
+import { encrypt } from '../../lib/secret-cipher.js';
 
 const slugRegex = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
 
@@ -233,10 +234,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     const existing = await prisma.sheetApi.findFirst({ where: { id, userId } });
     if (!existing) throw new NotFoundError('API not found.');
 
+    // Plaintext is generated server-side, returned to the caller exactly once
+    // (this response), and persisted only in encrypted form. The caller is
+    // expected to capture the plaintext now — there's no way to retrieve it
+    // later. See docs/api-security.md.
     const hmacSecret = crypto.randomBytes(32).toString('hex');
     await prisma.sheetApi.update({
       where: { id },
-      data: { hmacSecret, requireSigning: true },
+      data: { hmacSecret: encrypt(hmacSecret), requireSigning: true },
     });
 
     await invalidateSheetApiCache(existing);
