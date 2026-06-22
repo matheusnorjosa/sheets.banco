@@ -88,7 +88,8 @@ export function rowsFromValues(values: string[][], headerIndex = 0): RawRow[] {
     const row = values[r] ?? [];
     const obj: RawRow = {};
     for (let c = 0; c < headers.length; c++) {
-      obj[headers[c]] = String(row[c] ?? '');
+      const key = headers[c] ?? `col_${c + 1}`;
+      obj[key] = String(row[c] ?? '');
     }
     // Skip rows that are entirely empty
     if (Object.values(obj).every((v) => v === '')) continue;
@@ -194,8 +195,7 @@ export function buildEnvelope(params: {
       columns,
     });
 
-    for (let i = 0; i < sheet.rows.length; i++) {
-      const raw = sheet.rows[i];
+    for (const [i, raw] of sheet.rows.entries()) {
       const { normalized, validation } = normalizeRowByType(type, raw, ctx);
       const rHash = rowHash(raw);
       const iHash = importHash(type, type === 'unknown' ? null : (normalized as never), {

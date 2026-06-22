@@ -59,8 +59,8 @@ function parseArgs(argv: string[]): ProbeArgs {
     const next = argv[i + 1];
     if (a === '--apiId') { out.apiId = next; i++; }
     else if (a === '--sheet') { out.sheet = next; i++; }
-    else if (a === '--ranges') { out.ranges = next.split(',').map((s) => s.trim()).filter(Boolean); i++; }
-    else if (a === '--headerRows') { out.headerRows = next.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isInteger(n) && n > 0); i++; }
+    else if (a === '--ranges' && next) { out.ranges = next.split(',').map((s) => s.trim()).filter(Boolean); i++; }
+    else if (a === '--headerRows' && next) { out.headerRows = next.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isInteger(n) && n > 0); i++; }
   }
   out.baseUrl = process.env.API_BASE_URL ?? 'http://localhost:3000';
   const apiKey = process.env.API_KEY;

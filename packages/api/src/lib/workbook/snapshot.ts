@@ -116,7 +116,8 @@ export function buildWorkbookSheetSnapshot(input: BuildSnapshotInput): BuildSnap
     for (let c = 0; c < valueKeys.length; c++) {
       const v = String(row[c] ?? '');
       raw.push(v);
-      valuesObj[valueKeys[c]] = v;
+      const key = valueKeys[c] ?? `col_${c + 1}`;
+      valuesObj[key] = v;
       if (v !== '') allEmpty = false;
     }
     if (allEmpty) continue;

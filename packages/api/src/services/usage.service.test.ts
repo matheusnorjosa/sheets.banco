@@ -51,7 +51,7 @@ describe('enqueueUsageLog', () => {
   it('flushes synchronously when buffer hits BATCH_LIMIT (100)', () => {
     for (let i = 0; i < 100; i++) enqueueUsageLog(baseEntry);
     expect(createManyMock).toHaveBeenCalledTimes(1);
-    expect(createManyMock.mock.calls[0][0].data).toHaveLength(100);
+    expect(createManyMock.mock.calls[0]![0]!.data).toHaveLength(100);
   });
 
   it('flushes via the 30s timer once an entry is buffered', () => {
@@ -59,7 +59,7 @@ describe('enqueueUsageLog', () => {
     expect(createManyMock).not.toHaveBeenCalled();
     vi.advanceTimersByTime(30_000);
     expect(createManyMock).toHaveBeenCalledTimes(1);
-    expect(createManyMock.mock.calls[0][0].data).toHaveLength(1);
+    expect(createManyMock.mock.calls[0]![0]!.data).toHaveLength(1);
   });
 
   it('timer with empty buffer is a no-op (no DB call) — the Neon-wake fix', () => {
@@ -105,7 +105,7 @@ describe('enqueueUsageLog', () => {
       // ip omitted on purpose
     } as any);
     vi.advanceTimersByTime(30_000);
-    expect(createManyMock.mock.calls[0][0].data[0].ip).toBeNull();
+    expect(createManyMock.mock.calls[0]![0]!.data[0]!.ip).toBeNull();
   });
 
   it('swallows DB errors silently (telemetry must not break the app)', async () => {
@@ -125,7 +125,7 @@ describe('flushUsageLog (shutdown)', () => {
     enqueueUsageLog(baseEntry);
     await flushUsageLog();
     expect(createManyMock).toHaveBeenCalledTimes(1);
-    expect(createManyMock.mock.calls[0][0].data).toHaveLength(3);
+    expect(createManyMock.mock.calls[0]![0]!.data).toHaveLength(3);
     // Timer cleared — further ticks shouldn't re-fire
     createManyMock.mockClear();
     vi.advanceTimersByTime(60_000);

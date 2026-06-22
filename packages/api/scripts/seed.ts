@@ -14,7 +14,7 @@ async function main() {
 
   // Extract spreadsheet ID from URL or use as-is
   const match = spreadsheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  const spreadsheetId = match ? match[1] : spreadsheetUrl;
+  const spreadsheetId = match?.[1] ?? spreadsheetUrl;
 
   const sheetApi = await prisma.sheetApi.create({
     data: {

@@ -39,7 +39,7 @@ export async function schemaRoutes(app: FastifyInstance) {
       };
     }
 
-    const headers = Object.keys(rows[0]);
+    const headers = Object.keys(rows[0] ?? {});
     const sampleSize = Math.min(rows.length, 100);
     const columns = headers.map((name) => {
       const values = rows.slice(0, sampleSize).map((r) => r[name] ?? '');

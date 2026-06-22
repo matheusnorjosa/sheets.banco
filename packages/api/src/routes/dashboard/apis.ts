@@ -39,7 +39,7 @@ function getUserId(request: any): string {
 
 function extractSpreadsheetId(urlOrId: string): string {
   const match = urlOrId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  return match ? match[1] : urlOrId;
+  return match?.[1] ?? urlOrId;
 }
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
@@ -337,10 +337,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     const byStatus: Record<string, number> = {};
 
     for (const log of logs) {
-      const day = log.createdAt.toISOString().split('T')[0];
-      if (!byDay[day]) byDay[day] = { count: 0, totalMs: 0 };
-      byDay[day].count++;
-      byDay[day].totalMs += log.responseMs;
+      const day = log.createdAt.toISOString().split('T')[0] ?? '';
+      const dayStats = byDay[day] ?? { count: 0, totalMs: 0 };
+      dayStats.count++;
+      dayStats.totalMs += log.responseMs;
+      byDay[day] = dayStats;
 
       byMethod[log.method] = (byMethod[log.method] || 0) + 1;
 

@@ -16,7 +16,7 @@ describe('aprender_sistema target — produtos_controle', () => {
   it('produtos → target produtos_controle', () => {
     const env = envelopeOf('Controle', [baseProduto]);
     const t = buildAprenderSistemaTarget(env);
-    const r = t.records[0];
+    const r = t.records[0]!;
     expect(r.target_type).toBe('produtos_controle');
     if (r.target_type !== 'produtos_controle') throw new Error('type narrow');
     expect(r).toMatchObject({
@@ -33,20 +33,20 @@ describe('aprender_sistema target — produtos_controle', () => {
   it('always attaches PRODUCT_REVIEW_RECOMMENDED (no catalog yet)', () => {
     const env = envelopeOf('Controle', [baseProduto]);
     const t = buildAprenderSistemaTarget(env);
-    const r = t.records[0];
+    const r = t.records[0]!;
     expect(r.issues.find((i) => i.code === 'PRODUCT_REVIEW_RECOMMENDED')).toBeTruthy();
   });
 
   it('invalid produto row (no produto) → review', () => {
     const env = envelopeOf('Controle', [{ ...baseProduto, Produto: '' }]);
     const t = buildAprenderSistemaTarget(env);
-    expect(t.records[0].target_type).toBe('review');
+    expect(t.records[0]!.target_type).toBe('review');
   });
 
   it('uso_das_colecoes false → "NAO"', () => {
     const env = envelopeOf('Controle', [{ ...baseProduto, 'Uso das coleções': 'NÃO' }]);
     const t = buildAprenderSistemaTarget(env);
-    const r = t.records[0];
+    const r = t.records[0]!;
     if (r.target_type !== 'produtos_controle') throw new Error('type narrow');
     expect(r.uso_das_colecoes).toBe('NAO');
   });
@@ -67,7 +67,7 @@ describe('aprender_sistema target — produtos_controle', () => {
     };
     const env = envelopeOf('🟥 COMPRAS', [comprasRow]);
     const t = buildAprenderSistemaTarget(env);
-    const r = t.records[0];
+    const r = t.records[0]!;
     expect(r.target_type).toBe('produtos_controle');
     if (r.target_type !== 'produtos_controle') throw new Error('type narrow');
     expect(r.codigo).toBe('C-001');

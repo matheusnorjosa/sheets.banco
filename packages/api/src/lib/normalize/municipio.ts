@@ -33,7 +33,7 @@ export function parseMunicipio(input: unknown, fallbackUf?: unknown): MunicipioP
 
   for (const re of patterns) {
     const m = cleaned.match(re);
-    if (m) {
+    if (m && m[1] && m[2]) {
       const name = collapseSpaces(m[1]).trim();
       const uf = m[2].toUpperCase();
       if (UF_LIST.has(uf)) {

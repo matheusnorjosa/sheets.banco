@@ -85,7 +85,7 @@ describe('buildWorkbookSheetSnapshot', () => {
       values: { Nome: 'ALICE TEST', CPF: '11122233344', Email: 'a@example.com', Cargo: 'X' },
       raw: ['ALICE TEST', '11122233344', 'a@example.com', 'X'],
     });
-    expect(snap.rows[1].row_number).toBe(3);
+    expect(snap.rows[1]!.row_number).toBe(3);
   });
 
   it('handles unknown sheets without filtering them out', () => {
@@ -101,7 +101,7 @@ describe('buildWorkbookSheetSnapshot', () => {
     expect(snap.sheet_index).toBe(4);
     expect(snap.sheet_name).toBe('☑️ TEST UNKNOWN TAB');
     expect(snap.row_count).toBe(1);
-    expect(snap.rows[0].values).toEqual({ ColA: 'v1', ColB: 'v2' });
+    expect(snap.rows[0]!.values).toEqual({ ColA: 'v1', ColB: 'v2' });
   });
 
   it('preserves the original headers array even when value-keys diverge', () => {
@@ -116,13 +116,13 @@ describe('buildWorkbookSheetSnapshot', () => {
     // Original headers stay verbatim.
     expect(snap.headers).toEqual(['Produto', 'Produto', '']);
     // values dict gets stable safe keys.
-    expect(snap.rows[0].values).toEqual({
+    expect(snap.rows[0]!.values).toEqual({
       Produto: 'p1',
       Produto__2: 'p2',
       __col_3: 'p3',
     });
     // raw preserves position.
-    expect(snap.rows[0].raw).toEqual(['p1', 'p2', 'p3']);
+    expect(snap.rows[0]!.raw).toEqual(['p1', 'p2', 'p3']);
   });
 
   it('discards rows where every cell is empty but keeps row_number contiguous to the source', () => {
@@ -137,8 +137,8 @@ describe('buildWorkbookSheetSnapshot', () => {
       ],
     });
     expect(snap.row_count).toBe(2);
-    expect(snap.rows[0].row_number).toBe(2);
-    expect(snap.rows[1].row_number).toBe(4); // jumps past the empty row
+    expect(snap.rows[0]!.row_number).toBe(2);
+    expect(snap.rows[1]!.row_number).toBe(4); // jumps past the empty row
   });
 
   it('anchors row_number using the ?range= start when provided', () => {
@@ -152,8 +152,8 @@ describe('buildWorkbookSheetSnapshot', () => {
       ],
       range: 'A5:Z7',
     });
-    expect(snap.rows[0].row_number).toBe(6);
-    expect(snap.rows[1].row_number).toBe(7);
+    expect(snap.rows[0]!.row_number).toBe(6);
+    expect(snap.rows[1]!.row_number).toBe(7);
   });
 
   it('returns a coherent empty snapshot when values is [] (e.g., OOB range)', () => {
@@ -191,8 +191,8 @@ describe('buildWorkbookSheetSnapshot', () => {
         ['v1'],           // shorter than header row
       ],
     });
-    expect(snap.rows[0].raw).toEqual(['v1', '', '']);
-    expect(snap.rows[0].values).toEqual({ A: 'v1', B: '', C: '' });
+    expect(snap.rows[0]!.raw).toEqual(['v1', '', '']);
+    expect(snap.rows[0]!.values).toEqual({ A: 'v1', B: '', C: '' });
   });
 });
 
@@ -208,7 +208,7 @@ describe('buildWorkbookSheetSnapshot — ?headerRow= offset', () => {
     });
     expect(snap.headers).toEqual(['H1', 'H2']);
     expect(snap.row_count).toBe(1);
-    expect(snap.rows[0].row_number).toBe(2);
+    expect(snap.rows[0]!.row_number).toBe(2);
   });
 
   it('uses the requested header_row when banner rows precede it', () => {
@@ -227,8 +227,8 @@ describe('buildWorkbookSheetSnapshot — ?headerRow= offset', () => {
     });
     expect(snap.headers).toEqual(['Date', 'Value']);
     expect(snap.row_count).toBe(2);
-    expect(snap.rows[0].row_number).toBe(5);
-    expect(snap.rows[1].row_number).toBe(6);
+    expect(snap.rows[0]!.row_number).toBe(5);
+    expect(snap.rows[1]!.row_number).toBe(6);
   });
 
   it('combines header_row with ?range= so row_number stays anchored to the sheet', () => {
@@ -248,8 +248,8 @@ describe('buildWorkbookSheetSnapshot — ?headerRow= offset', () => {
     });
     expect(snap.headers).toEqual(['Date', 'Value']);
     expect(snap.row_count).toBe(3);
-    expect(snap.rows[0].row_number).toBe(5);
-    expect(snap.rows[2].row_number).toBe(7);
+    expect(snap.rows[0]!.row_number).toBe(5);
+    expect(snap.rows[2]!.row_number).toBe(7);
   });
 
   it('returns HEADER_ROW_OUTSIDE_RANGE when header_row is before the range start', () => {

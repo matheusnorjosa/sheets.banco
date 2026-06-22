@@ -68,7 +68,7 @@ export async function importExportRoutes(app: FastifyInstance) {
         reply.header('Content-Disposition', `attachment; filename="${sheetApi.slug || sheetApi.id}.csv"`);
         return '';
       }
-      const csvParser = new Json2CsvParser({ fields: Object.keys(rows[0]) });
+      const csvParser = new Json2CsvParser({ fields: Object.keys(rows[0] ?? {}) });
       const csv = csvParser.parse(rows);
       reply.header('Content-Type', 'text/csv');
       reply.header('Content-Disposition', `attachment; filename="${sheetApi.slug || sheetApi.id}.csv"`);

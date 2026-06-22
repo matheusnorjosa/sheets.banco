@@ -273,7 +273,7 @@ describe('generateTargetCsvLines / streamTargetCsv', () => {
     expect(chunks).toHaveLength(1 + reviewCount);
     expect(chunks[0]).toBe(REVIEW_HEADERS.join(',') + '\r\n');
     for (let i = 1; i < chunks.length; i++) {
-      expect(chunks[i].endsWith('\r\n')).toBe(true);
+      expect(chunks[i]!.endsWith('\r\n')).toBe(true);
     }
   });
 
@@ -348,7 +348,7 @@ describe('buildTargetCsv — review', () => {
     const env = envelopeOf('Random', [{ foo: 'bar' }]);
     const target = buildAprenderSistemaTarget(env);
     const csv = buildTargetCsv(target, 'review');
-    const dataLine = csvLines(csv)[1];
+    const dataLine = csvLines(csv)[1]!;
     // reason_codes is the third column (index 2). Reuse a tolerant regex
     // because the actual codes are produced upstream.
     expect(dataLine.split(',').length).toBeGreaterThanOrEqual(REVIEW_HEADERS.length);

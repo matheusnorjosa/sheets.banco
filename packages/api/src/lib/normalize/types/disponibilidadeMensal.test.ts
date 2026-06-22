@@ -28,7 +28,7 @@ describe('normalizeDisponibilidadeMensalRow', () => {
     for (let d = 1; d <= 31; d++) row[String(d)] = '';
     const { normalized, validation } = normalizeDisponibilidadeMensalRow(row);
     expect(validation.warnings.some((w) => w.code === 'PERIOD_UNKNOWN')).toBe(true);
-    expect(normalized.slots[0].data).toBeNull();
+    expect(normalized.slots[0]!.data).toBeNull();
   });
 
   it('errors when user column is empty', () => {

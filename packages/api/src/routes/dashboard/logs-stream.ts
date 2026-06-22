@@ -41,8 +41,9 @@ export async function logsStreamRoutes(app: FastifyInstance) {
           },
         });
 
-        if (logs.length > 0) {
-          lastChecked = logs[logs.length - 1].createdAt;
+        const last = logs[logs.length - 1];
+        if (last) {
+          lastChecked = last.createdAt;
           for (const log of logs) {
             reply.raw.write(`data: ${JSON.stringify(log)}\n\n`);
           }

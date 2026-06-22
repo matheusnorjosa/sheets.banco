@@ -67,10 +67,10 @@ describe('buildEnvelope', () => {
     expect(env.schema_version).toBe('1.0');
     expect(env.document.id).toBe('api-1');
     expect(env.document.records_count).toBe(1);
-    expect(env.sheets[0].detected_type).toBe('users');
+    expect(env.sheets[0]!.detected_type).toBe('users');
     expect(env.records).toHaveLength(1);
 
-    const rec = env.records[0];
+    const rec = env.records[0]!;
     expect(rec.source.sheet_name).toBe('Usuários');
     expect(rec.source.row_number).toBe(2);
     expect(rec.source.row_hash).toMatch(/^sha256:/);
@@ -89,13 +89,13 @@ describe('buildEnvelope', () => {
       apiName: 'Test',
       sheets: [{ name: 'Calendário', rows: [{ Dia: '1', Cor: 'azul' }] }],
     });
-    expect(env.sheets[0].detected_type).toBe('unknown');
-    const rec = env.records[0];
+    expect(env.sheets[0]!.detected_type).toBe('unknown');
+    const rec = env.records[0]!;
     expect(rec.normalized).toEqual({});
     expect(rec.import_hash).toBeNull();
     expect(rec.source.row_hash).toMatch(/^sha256:/); // row_hash still generated
     expect(rec.validation.status).toBe('warning');
-    expect(rec.validation.warnings[0].code).toBe('UNSUPPORTED_SHEET_TYPE');
+    expect(rec.validation.warnings[0]!.code).toBe('UNSUPPORTED_SHEET_TYPE');
     expect(rec.raw).toEqual({ Dia: '1', Cor: 'azul' });
   });
 
@@ -108,8 +108,8 @@ describe('buildEnvelope', () => {
       apiName: 'Test',
       sheets: [{ name: 'Controle', rows: [dupRow, { ...dupRow }] }],
     });
-    expect(env.records[0].validation.status).toBe('duplicate');
-    expect(env.records[1].validation.status).toBe('duplicate');
+    expect(env.records[0]!.validation.status).toBe('duplicate');
+    expect(env.records[1]!.validation.status).toBe('duplicate');
     expect(env.summary.duplicate_records).toBe(2);
   });
 
@@ -148,9 +148,9 @@ describe('buildEnvelope', () => {
         },
       ],
     });
-    expect(env.sheets[0].detected_type).toBe('eventos');
-    expect(env.records[0].normalized.titulo_key).toBe('X');
-    expect(env.records[0].import_hash).toMatch(/^sha256:/);
+    expect(env.sheets[0]!.detected_type).toBe('eventos');
+    expect(env.records[0]!.normalized.titulo_key).toBe('X');
+    expect(env.records[0]!.import_hash).toMatch(/^sha256:/);
   });
 
   it('routes "bloqueios" type', () => {
@@ -164,8 +164,8 @@ describe('buildEnvelope', () => {
         },
       ],
     });
-    expect(env.sheets[0].detected_type).toBe('bloqueios');
-    expect(env.records[0].normalized.tipo_key).toBe('T');
+    expect(env.sheets[0]!.detected_type).toBe('bloqueios');
+    expect(env.records[0]!.normalized.tipo_key).toBe('T');
   });
 
   it('routes "deslocamento" type', () => {
@@ -182,8 +182,8 @@ describe('buildEnvelope', () => {
         },
       ],
     });
-    expect(env.sheets[0].detected_type).toBe('deslocamento');
-    const n = env.records[0].normalized as { pessoas: { nome_original: string }[] };
+    expect(env.sheets[0]!.detected_type).toBe('deslocamento');
+    const n = env.records[0]!.normalized as { pessoas: { nome_original: string }[] };
     expect(n.pessoas).toHaveLength(2);
   });
 
@@ -195,10 +195,10 @@ describe('buildEnvelope', () => {
       apiName: 'Test',
       sheets: [{ name: 'MENSAL MAI 2026', rows: [row] }],
     });
-    expect(env.sheets[0].detected_type).toBe('disponibilidade_mensal');
-    const n = env.records[0].normalized as { periodo: { mes: number | null; ano: number | null } };
+    expect(env.sheets[0]!.detected_type).toBe('disponibilidade_mensal');
+    const n = env.records[0]!.normalized as { periodo: { mes: number | null; ano: number | null } };
     expect(n.periodo).toEqual({ tipo: 'mensal', mes: 5, ano: 2026 });
-    expect(env.records[0].import_hash).toMatch(/^sha256:/);
+    expect(env.records[0]!.import_hash).toMatch(/^sha256:/);
   });
 
   it('routes "disponibilidade_anual" with year from sheet name', () => {
@@ -217,8 +217,8 @@ describe('buildEnvelope', () => {
         },
       ],
     });
-    expect(env.sheets[0].detected_type).toBe('disponibilidade_anual');
-    const n = env.records[0].normalized as { periodo: { ano: number | null } };
+    expect(env.sheets[0]!.detected_type).toBe('disponibilidade_anual');
+    const n = env.records[0]!.normalized as { periodo: { ano: number | null } };
     expect(n.periodo.ano).toBe(2026);
   });
 

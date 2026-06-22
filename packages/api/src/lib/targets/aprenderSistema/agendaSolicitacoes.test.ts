@@ -31,7 +31,7 @@ describe('aprender_sistema target — agenda_solicitacoes (eventos)', () => {
   it('eventos → target agenda_solicitacoes', () => {
     const env = envelopeOf('Eventos', [baseEvento]);
     const t = buildAprenderSistemaTarget(env);
-    const r = t.records[0];
+    const r = t.records[0]!;
     expect(r.target_type).toBe('agenda_solicitacoes');
     if (r.target_type !== 'agenda_solicitacoes') throw new Error('type narrow');
     expect(r).toMatchObject({
@@ -54,21 +54,21 @@ describe('aprender_sistema target — agenda_solicitacoes (eventos)', () => {
   it('convidados-by-name in eventos → FORMADOR_REVIEW_REQUIRED', () => {
     const env = envelopeOf('Eventos', [{ ...baseEvento, convidado1: 'Pessoa Nome' }]);
     const t = buildAprenderSistemaTarget(env);
-    const r = t.records[0];
+    const r = t.records[0]!;
     expect(r.issues.find((i) => i.code === 'FORMADOR_REVIEW_REQUIRED')).toBeTruthy();
   });
 
   it('convidados-by-email in eventos → GUESTS_NOT_IMPORTED', () => {
     const env = envelopeOf('Eventos', [{ ...baseEvento, convidado1: 'a@example.com' }]);
     const t = buildAprenderSistemaTarget(env);
-    const r = t.records[0];
+    const r = t.records[0]!;
     expect(r.issues.find((i) => i.code === 'GUESTS_NOT_IMPORTED')).toBeTruthy();
   });
 
   it('titulo=SIM (boolean leak) → review, not agenda', () => {
     const env = envelopeOf('Eventos', [{ ...baseEvento, titulo: 'SIM' }]);
     const t = buildAprenderSistemaTarget(env);
-    const r = t.records[0];
+    const r = t.records[0]!;
     expect(r.target_type).toBe('review');
     if (r.target_type !== 'review') throw new Error('type narrow');
     expect(r.reason_codes).toContain('SUSPICIOUS_TITLE_BOOLEAN');
@@ -79,7 +79,7 @@ describe('aprender_sistema target — agenda_solicitacoes (legacy agenda)', () =
   it('agenda legacy → target with coordenador and formadores populated', () => {
     const env = envelopeOf('Agenda', [baseAgendaLegacy]);
     const t = buildAprenderSistemaTarget(env);
-    const r = t.records[0];
+    const r = t.records[0]!;
     expect(r.target_type).toBe('agenda_solicitacoes');
     if (r.target_type !== 'agenda_solicitacoes') throw new Error('type narrow');
     expect(r.coordenador).toBe('Coordenador Um');

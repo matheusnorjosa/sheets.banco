@@ -125,10 +125,10 @@ describe('buildSheetsWithTypes', () => {
       meta(['Mensal']),
       [['Formador', ...(days as unknown as string[])]],
     );
-    expect(result[0].detected_type).toBe('disponibilidade_mensal');
-    expect(result[0].columns).toEqual(['Formador', ...days.map(String)]);
-    expect(result[0].sheet_id).toBe(1);
-    expect(result[0].sheet_index).toBe(0);
+    expect(result[0]!.detected_type).toBe('disponibilidade_mensal');
+    expect(result[0]!.columns).toEqual(['Formador', ...days.map(String)]);
+    expect(result[0]!.sheet_id).toBe(1);
+    expect(result[0]!.sheet_index).toBe(0);
   });
 
   it('returns an empty array for an empty name list', () => {
