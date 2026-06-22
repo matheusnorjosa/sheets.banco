@@ -16,7 +16,7 @@ jobs:
     name: npm audit (high+ fails)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -38,7 +38,7 @@ jobs:
     name: Secret scan (trufflehog)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Full history so trufflehog can diff against the base branch on PRs
           # and scan all commits on push.
