@@ -33,7 +33,7 @@ describe('normalizeDisponibilidadeAnualRow', () => {
       FORMADOR: 'X',
       'MAI.': '1.234,5',
     }, { ano: 2026 });
-    expect(normalized.meses[0].valor_normalizado).toBe(1234.5);
+    expect(normalized.meses[0]!.valor_normalizado).toBe(1234.5);
   });
 
   it('warns when ano unknown', () => {

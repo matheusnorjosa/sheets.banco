@@ -62,7 +62,7 @@ describe('backward compatibility contract', () => {
       apiId: 'x', apiName: 'x',
       sheets: [{ name: 'Users', rows: [raw] }],
     });
-    expect(env.records[0].raw).toEqual(raw);
+    expect(env.records[0]!.raw).toEqual(raw);
   });
 
   it('envelope produces a row_hash for every record (including unknown types)', () => {
@@ -70,9 +70,9 @@ describe('backward compatibility contract', () => {
       apiId: 'x', apiName: 'x',
       sheets: [{ name: 'Mystery', rows: [{ foo: 'bar' }] }],
     });
-    expect(env.sheets[0].detected_type).toBe('unknown');
-    expect(env.records[0].source.row_hash).toMatch(/^sha256:/);
-    expect(env.records[0].import_hash).toBeNull();
+    expect(env.sheets[0]!.detected_type).toBe('unknown');
+    expect(env.records[0]!.source.row_hash).toMatch(/^sha256:/);
+    expect(env.records[0]!.import_hash).toBeNull();
   });
 
   it('keeps users/produtos/agenda detection working (no regression)', () => {
@@ -96,8 +96,8 @@ describe('backward compatibility contract', () => {
       }] }],
     });
 
-    expect(users.sheets[0].detected_type).toBe('users');
-    expect(produtos.sheets[0].detected_type).toBe('produtos');
-    expect(agenda.sheets[0].detected_type).toBe('agenda');
+    expect(users.sheets[0]!.detected_type).toBe('users');
+    expect(produtos.sheets[0]!.detected_type).toBe('produtos');
+    expect(agenda.sheets[0]!.detected_type).toBe('agenda');
   });
 });

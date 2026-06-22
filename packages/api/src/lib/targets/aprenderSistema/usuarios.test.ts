@@ -18,7 +18,7 @@ describe('aprender_sistema target — usuarios', () => {
     const t = buildAprenderSistemaTarget(env);
 
     expect(t.records).toHaveLength(1);
-    const r = t.records[0];
+    const r = t.records[0]!;
     expect(r.target_type).toBe('usuarios');
     if (r.target_type !== 'usuarios') throw new Error('type narrow');
     expect(r).toMatchObject({
@@ -37,7 +37,7 @@ describe('aprender_sistema target — usuarios', () => {
   it('invalid users record (no CPF) → review', () => {
     const env = envelopeOf('Usuários', [{ ...baseUser, CPF: '' }]);
     const t = buildAprenderSistemaTarget(env);
-    expect(t.records[0].target_type).toBe('review');
+    expect(t.records[0]!.target_type).toBe('review');
   });
 
   it('duplicate CPF tagged on every record sharing it', () => {

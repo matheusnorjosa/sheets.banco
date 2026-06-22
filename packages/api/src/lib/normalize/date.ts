@@ -18,7 +18,7 @@ export function parseDateBR(input: unknown): string | null {
   // dd/mm/yyyy or dd-mm-yyyy or dd.mm.yyyy
   const brMatch = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
   if (brMatch) {
-    const [, d, m, yRaw] = brMatch;
+    const [, d, m, yRaw] = brMatch as [string, string, string, string];
     const y = yRaw.length === 2 ? (Number(yRaw) > 50 ? '19' : '20') + yRaw : yRaw;
     const dn = Number(d);
     const mn = Number(m);

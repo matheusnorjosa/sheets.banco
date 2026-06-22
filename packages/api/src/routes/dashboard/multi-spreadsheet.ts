@@ -17,7 +17,7 @@ function getUserId(request: any): string {
 
 function extractSpreadsheetId(urlOrId: string): string {
   const match = urlOrId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  return match ? match[1] : urlOrId;
+  return match?.[1] ?? urlOrId;
 }
 
 export async function multiSpreadsheetRoutes(app: FastifyInstance) {

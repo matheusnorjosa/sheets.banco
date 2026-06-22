@@ -21,7 +21,7 @@ function sha256(input: string): string {
 export function rowHash(raw: RawRow): string {
   const ordered: Record<string, string> = {};
   for (const k of Object.keys(raw).sort()) {
-    ordered[k] = raw[k];
+    ordered[k] = raw[k] ?? '';
   }
   return sha256(JSON.stringify(ordered));
 }

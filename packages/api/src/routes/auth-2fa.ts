@@ -166,7 +166,9 @@ export async function auth2faRoutes(app: FastifyInstance) {
       // Try recovery codes
       let recoveryUsed = false;
       for (let i = 0; i < user.recoveryCodes.length; i++) {
-        const match = await bcrypt.compare(body.code, user.recoveryCodes[i]);
+        const code = user.recoveryCodes[i];
+        if (!code) continue;
+        const match = await bcrypt.compare(body.code, code);
         if (match) {
           // Mark as used
           const updated = [...user.recoveryCodes];

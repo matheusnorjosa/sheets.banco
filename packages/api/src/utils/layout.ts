@@ -21,7 +21,8 @@ function toTable(values: string[][]): SheetRow[] {
   return values.slice(1).map((row) => {
     const obj: SheetRow = {};
     for (let i = 0; i < headers.length; i++) {
-      obj[headers[i]] = String(row[i] ?? '');
+      const key = headers[i] ?? '';
+      obj[key] = String(row[i] ?? '');
     }
     return obj;
   });
@@ -39,7 +40,8 @@ function toMatrix(values: string[][]): Record<string, Record<string, string>> {
     if (!rowKey) continue;
     const rowObj: Record<string, string> = {};
     for (let c = 0; c < colKeys.length; c++) {
-      rowObj[colKeys[c]] = String(row[c + 1] ?? '');
+      const colKey = colKeys[c] ?? '';
+      rowObj[colKey] = String(row[c + 1] ?? '');
     }
     result[rowKey] = rowObj;
   }
@@ -94,7 +96,7 @@ export interface RenderOptions {
 export function parseRangeStartRow(range: string | undefined): number {
   if (!range) return 1;
   const m = range.match(/^[A-Z]*(\d+)/);
-  return m ? parseInt(m[1], 10) : 1;
+  return m && m[1] ? parseInt(m[1], 10) : 1;
 }
 
 /**

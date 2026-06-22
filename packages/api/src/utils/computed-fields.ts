@@ -68,7 +68,9 @@ function parseFactor(expr: string, state: ParseState): number {
   }
 
   const start = state.pos;
-  while (state.pos < expr.length && (/\d/.test(expr[state.pos]) || expr[state.pos] === '.')) {
+  while (state.pos < expr.length) {
+    const ch = expr[state.pos] as string;
+    if (!/\d/.test(ch) && ch !== '.') break;
     state.pos++;
   }
   const num = parseFloat(expr.slice(start, state.pos));

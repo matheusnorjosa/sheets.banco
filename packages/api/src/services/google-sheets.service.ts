@@ -222,7 +222,8 @@ export async function getRows(
     const rows = values.slice(headerIndex + 1).map((row) => {
       const obj: SheetRow = {};
       for (let i = 0; i < headers.length; i++) {
-        obj[headers[i]] = row[i] ?? '';
+        const key = headers[i] ?? '';
+        obj[key] = row[i] ?? '';
       }
       return obj;
     });
@@ -455,7 +456,8 @@ export async function getAllSheetsRaw(
     const result: Record<string, string[][]> = {};
     const valueRanges = response.data.valueRanges ?? [];
     for (let i = 0; i < names.length; i++) {
-      result[names[i]] = (valueRanges[i]?.values as string[][]) ?? [];
+      const name = names[i] ?? '';
+      result[name] = (valueRanges[i]?.values as string[][]) ?? [];
     }
 
     await cache.set(cacheKey, result, cacheTtl);
@@ -596,6 +598,7 @@ export async function updateRows(
 
     for (let i = 1; i < allValues.length; i++) {
       const row = allValues[i];
+      if (!row) continue;
       if ((row[colIndex] ?? '') === value) {
         const newRow = [...row];
         for (const [key, val] of Object.entries(processed)) {
@@ -647,7 +650,8 @@ export async function deleteRows(
 
     const rowIndicesToDelete: number[] = [];
     for (let i = 1; i < allValues.length; i++) {
-      if ((allValues[i][colIndex] ?? '') === value) {
+      const row = allValues[i];
+      if (row && (row[colIndex] ?? '') === value) {
         rowIndicesToDelete.push(i);
       }
     }
