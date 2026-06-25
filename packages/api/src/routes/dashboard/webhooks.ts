@@ -5,6 +5,7 @@ import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
+import { encrypt } from '../../lib/secret-cipher.js';
 
 const createWebhookSchema = z.object({
   url: z.string().url(),
@@ -57,16 +58,20 @@ export async function webhookRoutes(app: FastifyInstance) {
       throw new ValidationError('Provide a valid "url" and at least one "event".');
     }
 
+    // Plaintext is returned once in this response (consumers use it to verify
+    // signatures we send). DB stores the encrypted envelope. Rotation = delete
+    // + create.
+    const secretPlain = crypto.randomBytes(32).toString('hex');
     const webhook = await prisma.webhookSubscription.create({
       data: {
         sheetApiId: id,
         url: parsed.data.url,
         events: parsed.data.events,
-        secret: crypto.randomBytes(32).toString('hex'),
+        secret: encrypt(secretPlain),
       },
     });
 
-    return reply.status(201).send({ webhook });
+    return reply.status(201).send({ webhook: { ...webhook, secret: secretPlain } });
   });
 
   // PATCH /dashboard/apis/:id/webhooks/:webhookId — update webhook

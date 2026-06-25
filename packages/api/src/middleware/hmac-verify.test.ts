@@ -230,3 +230,26 @@ describe('hmacVerify — version routing', () => {
     expect(reply.status).not.toHaveBeenCalled();
   });
 });
+
+describe('hmacVerify — encrypted-secret dual read', () => {
+  // The hmacSecret column stores plaintext during the migration window and
+  // encrypted blobs (gcm$…) afterwards. hmacVerify must accept both — and the
+  // signature produced from the underlying plaintext must verify.
+  it('accepts a v1 signature when hmacSecret is an encrypted envelope', async () => {
+    process.env.SECRETS_ENC_KEY = crypto.randomBytes(32).toString('hex');
+    const { encrypt } = await import('../lib/secret-cipher.js?dualread=' + Date.now());
+    const encryptedSecret = encrypt(SECRET);
+
+    const ts = String(Math.floor(Date.now() / 1000));
+    const body = { hello: 'world' };
+    const signature = sign('POST', '/api/v1/abc', ts, JSON.stringify(body));
+    const req = mockRequest({
+      headers: { 'x-signature': signature, 'x-timestamp': ts },
+      body,
+      hmacSecret: encryptedSecret,
+    });
+    const reply = mockReply();
+    await hmacVerify(req, reply);
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+});

@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'node:crypto';
+import { decryptIfEncrypted } from '../lib/secret-cipher.js';
 
 const MAX_TIMESTAMP_DRIFT_MS = 5 * 60 * 1000;
 
@@ -69,8 +70,12 @@ export async function hmacVerify(request: FastifyRequest, reply: FastifyReply) {
   const bodyHash = crypto.createHash('sha256').update(bodyBytes).digest('hex');
   const canonical = `${request.method}\n${request.url}\n${timestamp}\n${bodyHash}`;
 
+  // hmacSecret may be stored encrypted (gcm$…) or legacy plaintext during the
+  // migration window. decryptIfEncrypted handles both transparently.
+  const hmacSecretPlain = decryptIfEncrypted(sheetApi.hmacSecret);
+
   const expected = crypto
-    .createHmac('sha256', sheetApi.hmacSecret)
+    .createHmac('sha256', hmacSecretPlain)
     .update(canonical)
     .digest('hex');
 

@@ -29,6 +29,7 @@ import { snapshotRoutes } from './routes/dashboard/snapshots.js';
 import { scheduledSyncRoutes } from './routes/dashboard/scheduled-sync.js';
 import { multiSpreadsheetRoutes } from './routes/dashboard/multi-spreadsheet.js';
 import { initScheduledSyncQueue, updateSyncSchedule } from './queues/scheduled-sync.queue.js';
+import { eagerLoadCipherKey } from './lib/secret-cipher.js';
 import { initScheduledSyncWorker, closeScheduledSyncWorker } from './workers/scheduled-sync.worker.js';
 import { schemaRoutes } from './routes/v1/schema.js';
 import { prisma } from './lib/prisma.js';
@@ -209,6 +210,10 @@ app.addHook('onClose', async () => {
 // Start
 const start = async () => {
   try {
+    // Fail loudly at boot if SECRETS_ENC_KEY is required but missing/invalid,
+    // instead of erroring on the first rotate / signed write.
+    eagerLoadCipherKey();
+
     await app.ready();
 
     // Initialize Redis-backed cache after plugin is registered

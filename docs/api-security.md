@@ -81,26 +81,42 @@ Status today (this PR introduces the foundation, **not** the migration):
 | `User.totpSecret` | plaintext | Tracked for envelope encryption |
 | `SheetApi.bearerToken`, `bearerTokenPrevious` | plaintext | Phase A — bcrypt with `keyPrefix` lookup hint |
 | `SheetApi.basicPass` | plaintext | Phase A — bcrypt |
-| `SheetApi.hmacSecret` | plaintext | Phase B — AES-256-GCM via `lib/secret-cipher.ts` |
-| `WebhookSubscription.secret` | plaintext | Phase B — AES-256-GCM |
+| `SheetApi.hmacSecret` | **encrypted (AES-256-GCM)** | Phase B done. Create/rotate via dashboard returns plaintext once, persists encrypted. |
+| `WebhookSubscription.secret` | **encrypted (AES-256-GCM)** | Phase B done. Create returns plaintext once, persists encrypted. |
 | `ApiKey.key` | plaintext | Phase A — bcrypt + `keyPrefix` |
 
 `lib/secret-cipher.ts` provides `encrypt()` / `decrypt()` / `isEncrypted()` / `decryptIfEncrypted()` against a master key (`SECRETS_ENC_KEY` env, 32 bytes hex). The envelope format is `gcm$<iv>$<ct>$<tag>` (base64url parts) — the prefix discriminates encrypted from legacy plaintext so the dual-read transition can route per-row.
 
-### Why this isn't already migrated
+### Phase A — bcrypt for ApiKey / bearer / basic (pending)
 
-Because flipping plaintext → bcrypt is breaking for any consumer that re-sends the original value. The migration plan:
+Because flipping plaintext → bcrypt is breaking for any consumer that re-sends the original value. The migration plan (tracked in #99):
 
 1. **Schema:** add `keyHash` + `keyPrefix` columns next to each plaintext column. Keep the plaintext during transition.
-2. **Reads:** try the hash first; fall back to the legacy plaintext if `keyHash` is null. Phase B fields go straight to the encrypted path via `decryptIfEncrypted`.
-3. **Writes:** every create/rotate populates the hash (or encrypts).
+2. **Reads:** try the hash first; fall back to the legacy plaintext if `keyHash` is null.
+3. **Writes:** every create/rotate populates the hash.
 4. **Grace window** of 30 days during which consumers must re-issue/rotate to receive a new credential. The current credential they hold keeps working until the legacy column is dropped.
 5. **Drop legacy columns** in a second migration after the grace window.
 
-Tracked in #62 (Phase A) and #62 (Phase B) — this PR lands the cipher + tests so the migration can pick it up.
+### Phase B — encryption for hmacSecret / webhook secret (done)
+
+Live in production once the migration script runs. Implementation:
+
+- **Writes** — every `POST /dashboard/apis/:id/rotate-hmac-secret` and `POST /dashboard/apis/:id/webhooks` generates plaintext server-side, returns it once in the response, and persists `encrypt(plaintext)` to the DB. The caller must capture the plaintext from that response — there's no way to retrieve it later.
+- **Reads** — `middleware/hmac-verify.ts` and `workers/webhook-delivery.worker.ts` call `decryptIfEncrypted()` at the verification / signing moment. Plaintext lives only in process memory for the duration of the operation.
+- **Dual-read** — `decryptIfEncrypted` passes plaintext through unchanged when the envelope prefix is absent, so any legacy rows that haven't been re-encrypted yet keep working.
+- **Migration script** — `scripts/encrypt-secrets.ts` walks both tables, encrypts in place, idempotent (skips rows that already start with `gcm$`). Run once after deploy.
+- **Boot guard** — `eagerLoadCipherKey()` runs at API startup; missing `SECRETS_ENC_KEY` in production fails fast with a descriptive error instead of erroring on the first signed request.
 
 ### Operating notes
 
 - `SECRETS_ENC_KEY` is generated once per environment and **must not change** without a coordinated re-encryption of every stored value. There is no DEK rotation built in; documented as a follow-up.
 - Loss of `SECRETS_ENC_KEY` = permanent loss of all encrypted secrets (no recovery — they're random anyway, but consumers must rotate every credential). Store it like a database root password.
 - Never log decrypted values. The `pino` redact list should be updated alongside any new field that flows through it.
+
+### Deploying Phase B to a fresh environment
+
+1. Generate a key: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+2. Set it as `SECRETS_ENC_KEY` in the environment (Render dashboard / `.env` / etc.) **before** deploying the version that requires it. The API refuses to boot in production without the key.
+3. Deploy.
+4. Run the migration once: `SECRETS_ENC_KEY=<key> npx tsx packages/api/scripts/encrypt-secrets.ts`. Idempotent.
+5. Verify: re-run the script and confirm all counts are `alreadyEncrypted` with `newlyEncrypted=0`.

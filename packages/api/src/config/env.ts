@@ -46,9 +46,18 @@ const envSchema = z.object({
         message: 'must be set in production (comma-separated list)',
       });
     }
-    // SECRETS_ENC_KEY becomes mandatory in prod once #62 Phase B migration
-    // lands. Currently soft-required so the existing prod environment doesn't
-    // fail to boot before the migration is applied.
+    // SECRETS_ENC_KEY is mandatory in prod since the Phase B encryption
+    // landed: every hmacSecret / WebhookSubscription.secret create/rotate
+    // path calls encrypt(), which throws without the key. Boot also calls
+    // eagerLoadCipherKey() — but failing here in env validation gives a
+    // clearer message.
+    if (!env.SECRETS_ENC_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SECRETS_ENC_KEY'],
+        message: 'must be set in production (64 hex chars; generate via node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))")',
+      });
+    }
   }
 });
 
