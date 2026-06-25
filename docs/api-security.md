@@ -79,23 +79,28 @@ Status today (this PR introduces the foundation, **not** the migration):
 |---|---|---|
 | `User.passwordHash` | bcrypt | ✅ never plaintext |
 | `User.totpSecret` | plaintext | Tracked for envelope encryption |
-| `SheetApi.bearerToken`, `bearerTokenPrevious` | plaintext | Phase A — bcrypt with `keyPrefix` lookup hint |
-| `SheetApi.basicPass` | plaintext | Phase A — bcrypt |
+| `SheetApi.bearerToken`, `bearerTokenPrevious` | **dual-read (plaintext + bcrypt)** | Phase A in flight. After backfill + observation window, the plaintext columns drop. |
+| `SheetApi.basicPass` | **dual-read (plaintext + bcrypt)** | Same as above. |
 | `SheetApi.hmacSecret` | **encrypted (AES-256-GCM)** | Phase B done. Create/rotate via dashboard returns plaintext once, persists encrypted. |
 | `WebhookSubscription.secret` | **encrypted (AES-256-GCM)** | Phase B done. Create returns plaintext once, persists encrypted. |
-| `ApiKey.key` | plaintext | Phase A — bcrypt + `keyPrefix` |
+| `ApiKey.key` | **dual-read (plaintext + bcrypt + indexed prefix)** | Phase A in flight; lookup uses `keyPrefix` index → bcrypt.compare. |
 
 `lib/secret-cipher.ts` provides `encrypt()` / `decrypt()` / `isEncrypted()` / `decryptIfEncrypted()` against a master key (`SECRETS_ENC_KEY` env, 32 bytes hex). The envelope format is `gcm$<iv>$<ct>$<tag>` (base64url parts) — the prefix discriminates encrypted from legacy plaintext so the dual-read transition can route per-row.
 
-### Phase A — bcrypt for ApiKey / bearer / basic (pending)
+### Phase A — bcrypt for ApiKey / bearer / basic (in flight)
 
-Because flipping plaintext → bcrypt is breaking for any consumer that re-sends the original value. The migration plan (tracked in #99):
+The transition is invisible to consumers — they keep sending the same `Bearer xxx` / `X-Api-Key yyy` they always did. The dual-read code in `middleware/api-auth.ts` and `lib/api-key-lookup.ts` tries bcrypt first and falls back to legacy plaintext per row.
 
-1. **Schema:** add `keyHash` + `keyPrefix` columns next to each plaintext column. Keep the plaintext during transition.
-2. **Reads:** try the hash first; fall back to the legacy plaintext if `keyHash` is null.
-3. **Writes:** every create/rotate populates the hash.
-4. **Grace window** of 30 days during which consumers must re-issue/rotate to receive a new credential. The current credential they hold keeps working until the legacy column is dropped.
-5. **Drop legacy columns** in a second migration after the grace window.
+**Strategy A (no consumer rotation needed):**
+
+1. **Schema** — added `bearerTokenHash`, `bearerTokenPreviousHash`, `basicPassHash` on SheetApi; `keyHash` + `keyPrefix` on ApiKey. Plaintext columns kept.
+2. **Backfill** — `scripts/backfill-hashes.ts` walks every existing row, computes bcrypt(plaintext), and populates the hash columns. Idempotent. No plaintext column is changed.
+3. **Reads** — `verifyCredential(input, hash, plain)` checks the hash if present, else the plaintext, else fails. After backfill the fallback path is dead code.
+4. **Writes** — `POST /:id/rotate-token`, `PATCH /:id` (when caller sets `bearerToken` / `basicPass`), and `POST /:id/keys` populate both columns so any operator action keeps the migration converging.
+5. **ApiKey lookup** — `findApiKeyByPlaintext()` narrows candidates by `keyPrefix` (indexed) then bcrypt-compares each. Legacy `findUnique({ where: { key } })` is consulted only when the prefix path returns no match.
+6. **Drop columns** — second PR after a ≥2-week observation window with zero auth fallback hits in logs. At that point `verifyCredential` collapses to `bcrypt.compare(input, hash)`.
+
+Why this avoids consumer breakage: every credential currently in flight remains valid through both branches throughout the transition. No rotation, no coordination, no email to consumers.
 
 ### Phase B — encryption for hmacSecret / webhook secret (done)
 
