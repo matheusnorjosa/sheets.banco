@@ -17,10 +17,13 @@ export interface SheetApi {
   allowUpdate: boolean;
   allowDelete: boolean;
   bearerToken: string | null;
+  bearerTokenHash: string | null;
   bearerTokenPrevious: string | null;
+  bearerTokenPreviousHash: string | null;
   bearerTokenRotatedAt: Date | null;
   basicUser: string | null;
   basicPass: string | null;
+  basicPassHash: string | null;
   hmacSecret: string | null;
   requireSigning: boolean;
   corsOrigins: string | null;

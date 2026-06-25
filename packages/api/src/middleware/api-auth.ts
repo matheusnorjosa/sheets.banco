@@ -1,13 +1,14 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'node:crypto';
+import bcrypt from 'bcrypt';
 
 const GRACE_PERIOD_MS = 60 * 60 * 1000; // 1 hour
 
 /**
- * Constant-time equality for ASCII/UTF-8 strings. `===` short-circuits on the
- * first mismatched byte, leaking length and prefix information through timing
- * — irrelevant over jittery TLS in practice, but the right primitive at the
- * crypto boundary. Mirrors the comparison already used in hmac-verify.ts.
+ * Constant-time equality for ASCII/UTF-8 strings. Used for the legacy
+ * plaintext fallback path during the bcrypt migration window (#99). bcrypt's
+ * own compare is constant-time relative to the hash, so we only need this
+ * helper for the fallback branch.
  */
 function equalConstantTime(a: string, b: string): boolean {
   const ba = Buffer.from(a, 'utf8');
@@ -17,15 +18,48 @@ function equalConstantTime(a: string, b: string): boolean {
 }
 
 /**
+ * Verify `input` against either a bcrypt hash (preferred) or a legacy
+ * plaintext string (transition fallback). At least one of `hash` / `plain`
+ * must be non-null — if both are null the caller has no credential
+ * configured and shouldn't be calling this in the first place.
+ *
+ * The dual-read order matters: we always check the hash first when present,
+ * so once a row has been backfilled the legacy plaintext path becomes dead
+ * code for that row. After the legacy column drops in the second migration,
+ * this whole helper collapses to `bcrypt.compare(input, hash)`.
+ */
+async function verifyCredential(
+  input: string,
+  hash: string | null,
+  plain: string | null,
+): Promise<boolean> {
+  if (hash) {
+    try {
+      return await bcrypt.compare(input, hash);
+    } catch {
+      return false;
+    }
+  }
+  if (plain) {
+    return equalConstantTime(input, plain);
+  }
+  return false;
+}
+
+/**
  * Middleware that checks per-API auth (bearer token or basic auth).
  * Supports token rotation with a 1-hour grace period for the previous token.
+ *
+ * During the #99 bcrypt migration: reads tolerate either hash or plaintext
+ * per row (see verifyCredential). Writes (rotate, PATCH) populate both
+ * columns so any row touched by an operator gets the hash for free.
  */
 export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
   const sheetApi = request.sheetApi;
   if (!sheetApi) return;
 
-  const hasBearerAuth = !!sheetApi.bearerToken;
-  const hasBasicAuth = !!sheetApi.basicUser && !!sheetApi.basicPass;
+  const hasBearerAuth = !!sheetApi.bearerToken || !!sheetApi.bearerTokenHash;
+  const hasBasicAuth = !!sheetApi.basicUser && (!!sheetApi.basicPass || !!sheetApi.basicPassHash);
 
   // No auth configured — endpoint is public
   if (!hasBearerAuth && !hasBasicAuth) return;
@@ -36,17 +70,18 @@ export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
   if (hasBearerAuth && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
 
-    // Check current token
-    if (sheetApi.bearerToken && equalConstantTime(token, sheetApi.bearerToken)) return;
+    if (await verifyCredential(token, sheetApi.bearerTokenHash, sheetApi.bearerToken)) {
+      return;
+    }
 
-    // Check previous token (grace period)
+    // Previous token (grace period)
     if (
-      sheetApi.bearerTokenPrevious &&
+      (sheetApi.bearerTokenPreviousHash || sheetApi.bearerTokenPrevious) &&
       sheetApi.bearerTokenRotatedAt &&
-      equalConstantTime(token, sheetApi.bearerTokenPrevious)
+      Date.now() - sheetApi.bearerTokenRotatedAt.getTime() < GRACE_PERIOD_MS &&
+      (await verifyCredential(token, sheetApi.bearerTokenPreviousHash, sheetApi.bearerTokenPrevious))
     ) {
-      const elapsed = Date.now() - sheetApi.bearerTokenRotatedAt.getTime();
-      if (elapsed < GRACE_PERIOD_MS) return;
+      return;
     }
   }
 
@@ -59,9 +94,8 @@ export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
       const pass = decoded.slice(sep + 1);
       if (
         sheetApi.basicUser &&
-        sheetApi.basicPass &&
         equalConstantTime(user, sheetApi.basicUser) &&
-        equalConstantTime(pass, sheetApi.basicPass)
+        (await verifyCredential(pass, sheetApi.basicPassHash, sheetApi.basicPass))
       ) {
         return;
       }

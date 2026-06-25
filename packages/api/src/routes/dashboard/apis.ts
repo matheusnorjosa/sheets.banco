@@ -7,8 +7,12 @@ import { NotFoundError, ValidationError, AppError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
+import bcrypt from 'bcrypt';
 import { invalidateSheetApiCache } from '../../services/sheet-api-cache.service.js';
 import { encrypt } from '../../lib/secret-cipher.js';
+import { deriveKeyPrefix } from '../../lib/api-key-lookup.js';
+
+const BCRYPT_ROUNDS = 10;
 
 const slugRegex = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
 
@@ -140,9 +144,24 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       throw new ValidationError('Invalid update data.');
     }
 
+    // Dual-write during #99 migration: whenever the caller sets a plaintext
+    // credential, we hash it too. Read path prefers the hash, so backfill +
+    // these writes converge the DB to hashes-everywhere over time.
+    const data: Record<string, unknown> = { ...parsed.data };
+    if (typeof parsed.data.bearerToken === 'string' && parsed.data.bearerToken.length > 0) {
+      data.bearerTokenHash = await bcrypt.hash(parsed.data.bearerToken, BCRYPT_ROUNDS);
+    } else if (parsed.data.bearerToken === null) {
+      data.bearerTokenHash = null;
+    }
+    if (typeof parsed.data.basicPass === 'string' && parsed.data.basicPass.length > 0) {
+      data.basicPassHash = await bcrypt.hash(parsed.data.basicPass, BCRYPT_ROUNDS);
+    } else if (parsed.data.basicPass === null) {
+      data.basicPassHash = null;
+    }
+
     const api = await prisma.sheetApi.update({
       where: { id },
-      data: parsed.data,
+      data,
     });
 
     // Pass the old slug in case the rename left a stale cache key.
@@ -209,11 +228,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     if (!existing) throw new NotFoundError('API not found.');
 
     const newToken = crypto.randomUUID();
+    const newTokenHash = await bcrypt.hash(newToken, BCRYPT_ROUNDS);
     await prisma.sheetApi.update({
       where: { id },
       data: {
+        // Carry both the plaintext and hash forward as "previous" during the
+        // grace window so the previous token keeps verifying via either path.
         bearerTokenPrevious: existing.bearerToken,
+        bearerTokenPreviousHash: existing.bearerTokenHash,
         bearerToken: newToken,
+        bearerTokenHash: newTokenHash,
         bearerTokenRotatedAt: new Date(),
       },
     });
@@ -259,10 +283,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     const existing = await prisma.sheetApi.findFirst({ where: { id, userId } });
     if (!existing) throw new NotFoundError('API not found.');
 
+    // Plaintext is generated server-side and returned ONCE in this response.
+    // DB stores plaintext (transition) + bcrypt hash + indexed prefix. After
+    // the legacy column drops, only the hash + prefix remain.
+    const plaintext = crypto.randomUUID();
     const apiKey = await prisma.apiKey.create({
       data: {
         sheetApiId: id,
-        key: crypto.randomUUID(),
+        key: plaintext,
+        keyHash: await bcrypt.hash(plaintext, BCRYPT_ROUNDS),
+        keyPrefix: deriveKeyPrefix(plaintext),
         label: label ?? null,
         scopes: body.scopes ?? ['sheets:read', 'sheets:write', 'sheets:delete'],
       },

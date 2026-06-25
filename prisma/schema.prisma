@@ -45,11 +45,19 @@ model SheetApi {
   allowDelete Boolean @default(true)
 
   // Auth (opt-in)
-  bearerToken          String?   @unique
-  bearerTokenPrevious  String?
-  bearerTokenRotatedAt DateTime?
-  basicUser            String?
-  basicPass            String?
+  //
+  // Migration in progress (#99): plaintext columns kept during transition;
+  // `*Hash` columns are bcrypt of the same plaintext. Read path tries hash
+  // first, falls back to plaintext. After backfill + observation window the
+  // plaintext columns will be dropped (issue #99 Phase A).
+  bearerToken              String?   @unique
+  bearerTokenHash          String?
+  bearerTokenPrevious      String?
+  bearerTokenPreviousHash  String?
+  bearerTokenRotatedAt     DateTime?
+  basicUser                String?
+  basicPass                String?
+  basicPassHash            String?
 
   // HMAC Request Signing
   hmacSecret     String?
@@ -86,7 +94,16 @@ model SheetApi {
 
 model ApiKey {
   id         String    @id @default(cuid())
+  // Plaintext during transition (#99 Phase A). After backfill + grace, this
+  // column drops and lookups go via keyPrefix index → bcrypt.compare.
   key        String    @unique @default(cuid())
+  // bcrypt hash of `key`. Populated for new keys on create and for legacy
+  // keys via the backfill script.
+  keyHash    String?
+  // First 8 chars of `key`, indexed. Lookups narrow candidates via prefix
+  // then bcrypt.compare each — bcrypt salts each hash so direct WHERE on the
+  // hash isn't possible. Not unique (collision risk ~1 in 16^8 ≈ 4e9 keys).
+  keyPrefix  String?
   sheetApiId String
   sheetApi   SheetApi  @relation(fields: [sheetApiId], references: [id], onDelete: Cascade)
   label      String?
@@ -97,6 +114,7 @@ model ApiKey {
   createdAt  DateTime  @default(now())
 
   @@index([sheetApiId])
+  @@index([keyPrefix])
 }
 
 model UsageLog {

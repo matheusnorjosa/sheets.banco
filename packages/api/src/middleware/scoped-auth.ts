@@ -1,19 +1,22 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
+import { findApiKeyByPlaintext } from '../lib/api-key-lookup.js';
 
 /**
  * Middleware factory that checks if the request has the required scopes.
  * Looks for API key in the X-Api-Key header.
  * If no API key is provided, this middleware is skipped (other auth may apply).
+ *
+ * Lookup goes through findApiKeyByPlaintext which handles the #99 dual-read
+ * (bcrypt by prefix → legacy plaintext fallback). After the backfill window
+ * closes and the legacy column drops, the fallback path becomes a no-op.
  */
 export function requireScopes(...required: string[]) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const apiKeyHeader = request.headers['x-api-key'] as string | undefined;
     if (!apiKeyHeader) return; // No API key — skip scope check
 
-    const apiKey = await prisma.apiKey.findUnique({
-      where: { key: apiKeyHeader },
-    });
+    const apiKey = await findApiKeyByPlaintext(apiKeyHeader);
 
     if (!apiKey || !apiKey.active) {
       return reply.status(401).send({
