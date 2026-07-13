@@ -7,6 +7,7 @@ import * as sheetsService from '../../services/google-sheets.service.js';
 import { apiAuth } from '../../middleware/api-auth.js';
 import { apiCors } from '../../middleware/cors.js';
 import { apiIpWhitelist } from '../../middleware/ip-whitelist.js';
+import { apiRateLimitOptions } from '../../middleware/rate-limiter.js';
 import { enqueueWrite } from '../../queues/sheets-write.queue.js';
 
 function getSheetApi(request: any) {
@@ -31,6 +32,9 @@ export async function importExportRoutes(app: FastifyInstance) {
   await app.register(import('@fastify/multipart'), {
     limits: { fileSize: 10_485_760 }, // 10MB
   });
+
+  // Per-API rate limiting (same pattern as v1/sheets.ts) — uses sheetApi.rateLimitRpm
+  app.register(import('@fastify/rate-limit'), apiRateLimitOptions() as any);
 
   // Resolve SheetApi
   app.addHook('onRequest', async (request) => {
