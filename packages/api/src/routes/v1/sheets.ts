@@ -46,6 +46,17 @@ const updateBodySchema = z.object({
   data: z.record(z.string(), z.string()),
 });
 
+// Body for PUT /:apiId?layout=raw&range=… — 2D matrix of values written to a
+// specific A1 range with USER_ENTERED semantics (formulas/dates parsed).
+const rawRangeBodySchema = z.object({
+  values: z.array(z.array(z.union([z.string(), z.number(), z.null()]))).min(1),
+});
+
+// Loose sanity: `Sheet1`, `A1`, `A1:B10`, `AL2:AR608`. The sheet name is
+// applied by the service; we forbid quote/apostrophe/bang here so a malicious
+// caller can't break out and target other sheets.
+const A1_RANGE_RE = /^[A-Za-z]+\d*(:[A-Za-z]+\d*)?$/;
+
 interface SheetApiRecord {
   id: string;
   spreadsheetId: string;
@@ -692,6 +703,48 @@ export async function sheetsRoutes(app: FastifyInstance) {
 
     if (query.sync === 'true') return { deleted };
     return reply.status(202).send({ queued: true, matchedRows: deleted });
+  });
+
+  // PUT /:apiId?layout=raw&range=A1:B10&sheet=Foo — write a 2D matrix of
+  // values to a specific A1 range. Uses USER_ENTERED so formulas and dates
+  // are parsed as if typed by hand. Requires `allowUpdate`.
+  //
+  // This is the low-level counterpart to POST (append) and PATCH (by key):
+  // useful for cross-column writes, bulk seeding, or edits that must not
+  // rewrite entire rows.
+  app.put('/:apiId', async (request, reply) => {
+    const sheetApi = getSheetApi(request);
+    const userId = getUserId(request);
+    const query = getQueryParams(request);
+    if (!sheetApi.allowUpdate) {
+      return reply.status(403).send({
+        error: true,
+        message: 'Updating is disabled for this API.',
+        code: 'UPDATE_DISABLED',
+        statusCode: 403,
+      });
+    }
+    if (query.layout !== 'raw') {
+      throw new ValidationError('PUT requires ?layout=raw.');
+    }
+    if (!query.range) {
+      throw new ValidationError('PUT requires ?range= (A1 notation, e.g. AL2:AR608).');
+    }
+    if (!A1_RANGE_RE.test(query.range)) {
+      throw new ValidationError('Invalid range. Use A1 notation: single cell (A1) or rectangle (A1:B10).');
+    }
+    const parsed = rawRangeBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new ValidationError('Body must be {"values": [[...], [...]]} — a non-empty 2D array of strings/numbers/nulls.');
+    }
+    const result = await sheetsService.updateRange(
+      userId,
+      sheetApi.spreadsheetId,
+      query.sheet,
+      query.range,
+      parsed.data.values,
+    );
+    return result;
   });
 
   // POST /:apiId — create rows

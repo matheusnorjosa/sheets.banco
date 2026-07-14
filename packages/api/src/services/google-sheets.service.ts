@@ -624,6 +624,50 @@ export async function updateRows(
   }
 }
 
+/**
+ * Write a 2D values array to a specific A1 range on a sheet.
+ *
+ * Unlike `updateRows` (which is row-oriented, matches by header/key and
+ * rewrites the full row), this writes each cell of the given range directly.
+ * Values are interpreted with `USER_ENTERED` so formulas (`=FOO(...)`) and
+ * dates/numbers behave as if a human had typed them.
+ *
+ * The `range` is the A1 body only (e.g. `AL2:AR608`, `J1`) — the sheet name is
+ * prepended and quoted by this function.
+ *
+ * Rejects with `NotFoundError` if the sheet doesn't exist; other errors are
+ * mapped by `handleSheetError`.
+ */
+export async function updateRange(
+  userId: string,
+  spreadsheetId: string,
+  sheetName: string | undefined,
+  range: string,
+  values: (string | number | null)[][],
+): Promise<{ updatedRange: string; updatedRows: number; updatedColumns: number; updatedCells: number }> {
+  try {
+    const tab = await resolveSheetName(userId, spreadsheetId, sheetName);
+    const sheets = await getSheetsClient(userId);
+    const fullRange = `'${tab}'!${range}`;
+    const response = await withBackoff(() => sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: fullRange,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values },
+    }));
+    await invalidateCache(spreadsheetId);
+    return {
+      updatedRange: response.data.updatedRange ?? fullRange,
+      updatedRows: response.data.updatedRows ?? 0,
+      updatedColumns: response.data.updatedColumns ?? 0,
+      updatedCells: response.data.updatedCells ?? 0,
+    };
+  } catch (error) {
+    if (error instanceof NotFoundError) throw error;
+    return handleSheetError(error) as never;
+  }
+}
+
 export async function deleteRows(
   userId: string,
   spreadsheetId: string,
