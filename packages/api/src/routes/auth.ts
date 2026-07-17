@@ -8,6 +8,7 @@ import { ValidationError } from '../lib/errors.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
 import { authRateLimitOptions } from '../middleware/rate-limiter.js';
 import { env } from '../config/env.js';
+import { encryptOptional } from '../lib/secret-cipher.js';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -210,8 +211,8 @@ export async function authRoutes(app: FastifyInstance) {
         await prisma.user.update({
           where: { id: state.userId },
           data: {
-            googleAccessToken: tokens.access_token ?? undefined,
-            googleRefreshToken: tokens.refresh_token ?? undefined,
+            googleAccessToken: encryptOptional(tokens.access_token),
+            googleRefreshToken: encryptOptional(tokens.refresh_token),
             googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
           },
         });
@@ -235,8 +236,8 @@ export async function authRoutes(app: FastifyInstance) {
         await prisma.user.update({
           where: { id: user.id },
           data: {
-            googleAccessToken: tokens.access_token ?? undefined,
-            googleRefreshToken: tokens.refresh_token ?? undefined,
+            googleAccessToken: encryptOptional(tokens.access_token),
+            googleRefreshToken: encryptOptional(tokens.refresh_token),
             googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
             name: user.name || profile.name || undefined,
           },
@@ -249,8 +250,8 @@ export async function authRoutes(app: FastifyInstance) {
             email: profile.email,
             passwordHash: randomPass,
             name: profile.name || null,
-            googleAccessToken: tokens.access_token ?? undefined,
-            googleRefreshToken: tokens.refresh_token ?? undefined,
+            googleAccessToken: encryptOptional(tokens.access_token),
+            googleRefreshToken: encryptOptional(tokens.refresh_token),
             googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
           },
         });

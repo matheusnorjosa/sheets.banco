@@ -7,6 +7,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import rawBody from 'fastify-raw-body';
 import { env } from './config/env.js';
 import { AppError } from './lib/errors.js';
+import { redactPaths } from './lib/logger.js';
 import { sheetsRoutes } from './routes/v1/sheets.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboard/apis.js';
@@ -35,7 +36,7 @@ import { schemaRoutes } from './routes/v1/schema.js';
 import { prisma } from './lib/prisma.js';
 
 const app = Fastify({
-  logger: { level: env.LOG_LEVEL },
+  logger: { level: env.LOG_LEVEL, redact: { paths: redactPaths, censor: '[REDACTED]' } },
   bodyLimit: env.BODY_LIMIT,
   trustProxy: true,
   // Echo `X-Request-Id` so support flows can correlate logs ↔ client reports.
