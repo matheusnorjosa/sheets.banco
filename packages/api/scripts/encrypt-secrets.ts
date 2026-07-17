@@ -1,6 +1,6 @@
 /**
- * One-off migration: re-encrypt SheetApi.hmacSecret and
- * WebhookSubscription.secret in place.
+ * One-off migration: re-encrypt at-rest secrets in place — SheetApi.hmacSecret,
+ * WebhookSubscription.secret, and User.googleAccessToken/googleRefreshToken.
  *
  * Iterates all rows. Rows whose value is already encrypted (gcm$ prefix) are
  * skipped — idempotent, safe to re-run. Rows with legacy plaintext are
@@ -80,6 +80,42 @@ async function migrateWebhookSubscriptions(): Promise<MigrationStats> {
   return stats;
 }
 
+async function migrateUsers(): Promise<MigrationStats> {
+  const stats: MigrationStats = {
+    scanned: 0,
+    alreadyEncrypted: 0,
+    newlyEncrypted: 0,
+    skippedNull: 0,
+  };
+  const users = await prisma.user.findMany({
+    select: { id: true, googleAccessToken: true, googleRefreshToken: true },
+  });
+  for (const user of users) {
+    stats.scanned++;
+    const data: { googleAccessToken?: string; googleRefreshToken?: string } = {};
+    let hadValue = false;
+    if (user.googleAccessToken !== null) {
+      hadValue = true;
+      if (!isEncrypted(user.googleAccessToken)) data.googleAccessToken = encrypt(user.googleAccessToken);
+    }
+    if (user.googleRefreshToken !== null) {
+      hadValue = true;
+      if (!isEncrypted(user.googleRefreshToken)) data.googleRefreshToken = encrypt(user.googleRefreshToken);
+    }
+    if (!hadValue) {
+      stats.skippedNull++;
+      continue;
+    }
+    if (Object.keys(data).length > 0) {
+      await prisma.user.update({ where: { id: user.id }, data });
+      stats.newlyEncrypted++;
+    } else {
+      stats.alreadyEncrypted++;
+    }
+  }
+  return stats;
+}
+
 async function main(): Promise<void> {
   if (!process.env.SECRETS_ENC_KEY) {
     console.error('SECRETS_ENC_KEY is required. Set to 64 hex chars before running.');
@@ -93,6 +129,10 @@ async function main(): Promise<void> {
   console.log('WebhookSubscription.secret ...');
   const subStats = await migrateWebhookSubscriptions();
   console.log(`  scanned=${subStats.scanned} alreadyEncrypted=${subStats.alreadyEncrypted} newlyEncrypted=${subStats.newlyEncrypted} skippedNull=${subStats.skippedNull}`);
+
+  console.log('User Google tokens ...');
+  const userStats = await migrateUsers();
+  console.log(`  scanned=${userStats.scanned} alreadyEncrypted=${userStats.alreadyEncrypted} newlyEncrypted=${userStats.newlyEncrypted} skippedNull=${userStats.skippedNull}`);
 }
 
 main()

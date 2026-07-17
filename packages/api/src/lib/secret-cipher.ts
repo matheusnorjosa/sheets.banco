@@ -99,6 +99,14 @@ export function decryptIfEncrypted(value: string): string {
 }
 
 /**
+ * Encrypt an optional value; null/undefined/empty passes through as `undefined`
+ * so a Prisma create/update treats it as "leave unset" instead of storing "".
+ */
+export function encryptOptional(value: string | null | undefined): string | undefined {
+  return value ? encrypt(value) : undefined;
+}
+
+/**
  * Only call after `SECRETS_ENC_KEY` validation has run — use during startup
  * to fail loudly when prod is misconfigured rather than at the first read of
  * an encrypted column. No-op in dev/test if no key (the lazy `loadKey` path

@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { AppError } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
 import * as cache from './cache.service.js';
+import { encrypt, decryptIfEncrypted } from '../lib/secret-cipher.js';
 
 interface CachedCredentials {
   accessToken: string;
@@ -29,8 +30,8 @@ export async function getOAuthClient(userId: string): Promise<OAuth2Client> {
 
   if (cached) {
     oauth2Client.setCredentials({
-      access_token: cached.accessToken,
-      refresh_token: cached.refreshToken,
+      access_token: decryptIfEncrypted(cached.accessToken),
+      refresh_token: decryptIfEncrypted(cached.refreshToken),
       expiry_date: cached.expiryDate,
     });
   } else {
@@ -41,12 +42,13 @@ export async function getOAuthClient(userId: string): Promise<OAuth2Client> {
     }
 
     oauth2Client.setCredentials({
-      access_token: user.googleAccessToken,
-      refresh_token: user.googleRefreshToken,
+      access_token: decryptIfEncrypted(user.googleAccessToken),
+      refresh_token: decryptIfEncrypted(user.googleRefreshToken),
       expiry_date: user.googleTokenExpiry?.getTime() ?? null,
     });
 
-    // Cache credentials (TTL = time until token expiry, max 50 min)
+    // Cache the stored (encrypted-at-rest) credentials; they're decrypted at
+    // the point of use above. TTL = time until token expiry, max 50 min.
     const ttl = computeTtl(user.googleTokenExpiry);
     await cache.set(cacheKey, {
       accessToken: user.googleAccessToken,
@@ -58,18 +60,18 @@ export async function getOAuthClient(userId: string): Promise<OAuth2Client> {
   // Listen for token refreshes and persist them
   oauth2Client.on('tokens', async (tokens) => {
     const update: Record<string, unknown> = {};
-    if (tokens.access_token) update.googleAccessToken = tokens.access_token;
-    if (tokens.refresh_token) update.googleRefreshToken = tokens.refresh_token;
+    if (tokens.access_token) update.googleAccessToken = encrypt(tokens.access_token);
+    if (tokens.refresh_token) update.googleRefreshToken = encrypt(tokens.refresh_token);
     if (tokens.expiry_date) update.googleTokenExpiry = new Date(tokens.expiry_date);
 
     if (Object.keys(update).length > 0) {
-      // Update database
+      // Persist encrypted at rest
       await prisma.user.update({ where: { id: userId }, data: update });
 
-      // Update cache with new credentials
+      // Cache the encrypted form (decrypted at the point of use)
       const newCreds: CachedCredentials = {
-        accessToken: (tokens.access_token ?? oauth2Client.credentials.access_token) as string,
-        refreshToken: (tokens.refresh_token ?? oauth2Client.credentials.refresh_token) as string,
+        accessToken: encrypt((tokens.access_token ?? oauth2Client.credentials.access_token ?? '') as string),
+        refreshToken: encrypt((tokens.refresh_token ?? oauth2Client.credentials.refresh_token ?? '') as string),
         expiryDate: tokens.expiry_date ?? null,
       };
       const ttl = tokens.expiry_date ? computeTtl(new Date(tokens.expiry_date)) : 3000;
