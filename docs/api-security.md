@@ -1,6 +1,6 @@
 # Per-API security
 
-Each SheetApi has six independent primitives. They compose: any failure short-circuits the request before it touches Google Sheets.
+Each SheetApi has seven independent primitives. They compose: any failure short-circuits the request before it touches Google Sheets.
 
 This page is the map. Per-feature deep-dives live in [hmac-signing.md](./hmac-signing.md) and the API reference. The "at rest" section at the bottom covers where the secrets themselves live (and the encryption foundation that's landing).
 
@@ -9,7 +9,7 @@ This page is the map. Per-feature deep-dives live in [hmac-signing.md](./hmac-si
 ```
 1. CORS check          (preflight rejected → 403 CORS_FORBIDDEN)
 2. IP allowlist        (off-list → 403 IP_FORBIDDEN)
-3. Bearer / Basic auth (no/wrong creds → 401 API_UNAUTHORIZED)
+3. Bearer / Basic / API key (no/wrong creds → 401 API_UNAUTHORIZED)
 4. HMAC signature      (only if requireSigning, → 401 SIGNATURE_*)
 5. Rate limit          (over budget → 429 RATE_LIMIT_EXCEEDED)
 6. Feature gates       (allowRead/Create/Update/Delete → 403 *_DISABLED)
@@ -18,12 +18,13 @@ This page is the map. Per-feature deep-dives live in [hmac-signing.md](./hmac-si
 
 Steps 1–4 are `onRequest` / `preHandler` hooks in `packages/api/src/routes/v1/sheets.ts`. Rate limit is enforced by `@fastify/rate-limit`. Feature gates are inside the handler.
 
-## The six primitives
+## The seven primitives
 
 | Primitive | Field(s) on SheetApi | Strength | When to enable | Trade-off |
 |---|---|---|---|---|
 | **Bearer token** | `bearerToken`, `bearerTokenPrevious`, `bearerTokenRotatedAt` | Long random string. Constant-time compare. 1h grace on previous token. | Default for server-to-server callers. | Stored plaintext today (#62 migrates to bcrypt). |
 | **Basic auth** | `basicUser`, `basicPass` | Same string match, constant-time. No rotation grace. | Tools that only speak Basic (curl scripts, legacy clients). | No rotation grace — caller breaks the moment you change it. Prefer bearer. |
+| **API key** | `ApiKey` rows (`keyHash`, `keyPrefix`, `scopes`, `active`, `expiresAt`) | bcrypt, looked up by indexed prefix. Scoped per HTTP method, individually revocable, optional expiry. | Ad-hoc or short-lived clients you don't want holding the shared bearer token. | Costs one DB lookup per request (only when the bearer token didn't already match). |
 | **HMAC signing** | `requireSigning`, `hmacSecret` | HMAC-SHA256 over canonical (METHOD\nPATH\nTS\nHASH(body)), 5min replay window. v2 uses raw body bytes. | Writes from untrusted networks; partners who already speak HMAC. | Adds client complexity. See [hmac-signing.md](./hmac-signing.md). |
 | **IP allowlist** | `ipWhitelist` (string array) | Exact match against `request.ip` (Fastify uses `trustProxy: true` so X-Forwarded-For is honored). | Calls from a known-stable office or VPN egress. | Falls apart with mobile/roaming callers. |
 | **CORS** | `corsOrigins` (string array) | Per-API origin allowlist; composed with the global CORS for dashboard routes. | Browsers consuming the API directly. | If unset, all origins are allowed for browser callers (use deliberately). |
@@ -38,6 +39,53 @@ Steps 1–4 are `onRequest` / `preHandler` hooks in `packages/api/src/routes/v1/
 | Public read+write | Bearer token + HMAC v2 (signing) + rate limit |
 | Browser-fronted via SDK | CORS allowlist + bearer (if not public) |
 | Webhook receiver wanting outbound signing | Bearer (or none) + HMAC v2 for writes |
+| Ad-hoc client / scripting agent | Scoped API key (read-only unless it must write) |
+
+## API keys
+
+The bearer token is a single shared secret per API: everything that calls the
+API holds the same string, so handing it to one more client means every client
+now shares a secret with that one, and revoking it means coordinating a swap
+with all of them.
+
+API keys are the per-client alternative. They live in the `ApiKey` table —
+many per API, each labelled, individually revocable, optionally expiring, and
+scoped:
+
+| Scope | Grants |
+|---|---|
+| `sheets:read` | `GET`, `HEAD`, `OPTIONS` |
+| `sheets:write` | `POST`, `PUT`, `PATCH` |
+| `sheets:delete` | `DELETE` |
+
+An unrecognized method requires `sheets:write` — the mapping fails closed.
+
+Send one either way; both are equivalent:
+
+```bash
+curl -H "X-API-Key: <key>" https://api.example.com/api/v1/<apiId>
+curl -H "Authorization: Bearer <key>" https://api.example.com/api/v1/<apiId>
+```
+
+Bearer is accepted so clients that only speak `Authorization` can use a key
+without special-casing. The API's own bearer token is checked first, so keys
+never add a database lookup to traffic that already authenticates.
+
+Create one at `POST /dashboard/apis/:id/keys` (or the dashboard's **Chaves de
+API** tab). **The plaintext is returned exactly once, in that response** —
+every other endpoint returns only `keyPrefix`. Lost key → revoke and issue a
+new one.
+
+Two things worth knowing:
+
+- **A key cannot close an open API.** If a SheetApi has no bearer token and no
+  basic auth it is public, and it stays public no matter how many keys exist.
+  Keys narrow *who* gets into an API that already demands a credential. The
+  dashboard warns when you mint a key in this state.
+- **Keys are bound to one SheetApi.** The lookup is global, so `apiAuth`
+  verifies `apiKey.sheetApiId` matches the API being called. A key for one
+  spreadsheet is rejected on every other one, with the same generic 401 as an
+  invalid key — the response never confirms that the key exists elsewhere.
 
 ## Bearer token rotation
 

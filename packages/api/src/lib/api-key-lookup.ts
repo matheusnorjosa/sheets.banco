@@ -2,7 +2,8 @@ import bcrypt from 'bcrypt';
 import { prisma } from './prisma.js';
 
 /**
- * Shape returned by lookup — same fields scoped-auth needs from a Prisma row.
+ * Shape returned by lookup — the fields `apiAuth` needs from a Prisma row to
+ * decide whether a key is usable: ownership, active, expiry and scopes.
  */
 export interface ApiKeyRecord {
   id: string;

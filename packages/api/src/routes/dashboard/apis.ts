@@ -38,6 +38,19 @@ const updateApiSchema = z.object({
   cacheTtlSeconds: z.number().min(0).optional(),
 });
 
+/**
+ * The scopes an API key can carry. `apiAuth` maps each request method onto one
+ * of these (GET→read, DELETE→delete, everything else→write), so a key granted
+ * only `sheets:read` can query a spreadsheet but never modify it.
+ */
+const ALL_SCOPES = ['sheets:read', 'sheets:write', 'sheets:delete'] as const;
+
+const createApiKeySchema = z.object({
+  label: z.string().min(1).max(120).optional(),
+  scopes: z.array(z.enum(ALL_SCOPES)).min(1).optional(),
+  expiresAt: z.string().datetime().nullable().optional(),
+});
+
 function getUserId(request: any): string {
   return (request.user as { sub: string }).sub;
 }
@@ -121,7 +134,20 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       where: { id, userId },
       include: {
         apiKeys: {
-          select: { id: true, key: true, label: true, active: true, createdAt: true },
+          // Deliberately omits `key`/`keyHash`: the plaintext is shown once, at
+          // creation, and never again. `keyPrefix` is enough to tell two keys
+          // apart in the UI without this endpoint handing out live credentials
+          // on every dashboard page load.
+          select: {
+            id: true,
+            keyPrefix: true,
+            label: true,
+            active: true,
+            scopes: true,
+            expiresAt: true,
+            lastUsedAt: true,
+            createdAt: true,
+          },
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -277,8 +303,12 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   app.post('/:id/keys', async (request, reply) => {
     const userId = getUserId(request);
     const { id } = request.params as { id: string };
-    const body = (request.body ?? {}) as { label?: string; scopes?: string[] };
-    const label = body.label;
+
+    const parsed = createApiKeySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new ValidationError('Invalid API key data.');
+    }
+    const { label, scopes, expiresAt } = parsed.data;
 
     const existing = await prisma.sheetApi.findFirst({ where: { id, userId } });
     if (!existing) throw new NotFoundError('API not found.');
@@ -294,11 +324,29 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         keyHash: await bcrypt.hash(plaintext, BCRYPT_ROUNDS),
         keyPrefix: deriveKeyPrefix(plaintext),
         label: label ?? null,
-        scopes: body.scopes ?? ['sheets:read', 'sheets:write', 'sheets:delete'],
+        scopes: scopes ?? [...ALL_SCOPES],
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+      },
+      select: {
+        id: true,
+        keyPrefix: true,
+        label: true,
+        active: true,
+        scopes: true,
+        expiresAt: true,
+        createdAt: true,
       },
     });
 
-    return reply.status(201).send({ apiKey });
+    // `key` is spread in separately so it exists only on this response body —
+    // never on the row we echo back from any other route.
+    return reply.status(201).send({
+      apiKey: { ...apiKey, key: plaintext },
+      // The API is only actually gated if it has a bearer/basic credential.
+      // Without one it stays public and this key restricts nothing — the
+      // dashboard surfaces this as a warning next to the new key.
+      apiIsPublic: !existing.bearerToken && !existing.bearerTokenHash && !existing.basicUser,
+    });
   });
 
   // DELETE /dashboard/apis/:id/keys/:keyId — revoke an API key
