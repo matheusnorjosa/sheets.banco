@@ -402,6 +402,17 @@ describe('apiAuth — API key', () => {
     expect(reply.status).toHaveBeenCalledWith(403);
   });
 
+  it('ignores a duplicated X-API-Key header instead of blowing up', async () => {
+    // A repeated header can arrive as an array; passing that to the lookup
+    // would reach Prisma as a malformed `where` and 500 from inside auth.
+    const request = mockRequest({ sheetApi: gatedApi() });
+    request.headers['x-api-key'] = ['chave-a', 'chave-b'];
+    const reply = mockReply();
+    await apiAuth(request, reply);
+    expect(reply.status).toHaveBeenCalledWith(401);
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   it('leaves a public API public and never looks a key up', async () => {
     const reply = mockReply();
     await apiAuth(

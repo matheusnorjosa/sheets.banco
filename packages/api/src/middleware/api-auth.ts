@@ -207,8 +207,15 @@ export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
 
   // Try an API key. Accepted from `X-API-Key`, or from the bearer value when it
   // didn't match the API's own token — one header, two kinds of credential.
+  //
+  // The `typeof` guard is not ceremony: Fastify types this header as a plain
+  // string, but a duplicated header can surface as an array depending on the
+  // HTTP stack in front of us. Handing a non-string to the lookup would reach
+  // Prisma as a malformed `where` and turn a bad request into a 500 from inside
+  // the auth middleware. Anything that isn't a string is simply not a key.
+  const rawKeyHeader = request.headers['x-api-key'];
   const keyCandidate =
-    (request.headers['x-api-key'] as string | undefined) ||
+    (typeof rawKeyHeader === 'string' ? rawKeyHeader : undefined) ||
     (authHeader.startsWith('Bearer ') ? authHeader.slice(7) : undefined);
 
   if (keyCandidate) {
