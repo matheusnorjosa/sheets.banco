@@ -266,14 +266,36 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
   );
 }
 
+const ESCOPOS = [
+  { valor: "sheets:read", rotulo: "Ler", ajuda: "GET" },
+  { valor: "sheets:write", rotulo: "Escrever", ajuda: "POST, PUT, PATCH" },
+  { valor: "sheets:delete", rotulo: "Excluir", ajuda: "DELETE" },
+];
+
 function KeysTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => void }) {
   const [label, setLabel] = useState("");
+  const [scopes, setScopes] = useState<string[]>(ESCOPOS.map((e) => e.valor));
   const [creating, setCreating] = useState(false);
+  // Plaintext lives in component state only, until the user navigates away.
+  // The server will not return it again.
+  const [novaChave, setNovaChave] = useState<{ key: string; publica: boolean } | null>(null);
+  const [copiado, setCopiado] = useState(false);
+
+  const toggleScope = (valor: string) => {
+    setScopes((atual) =>
+      atual.includes(valor) ? atual.filter((s) => s !== valor) : [...atual, valor]
+    );
+  };
 
   const handleCreate = async () => {
     setCreating(true);
     try {
-      await api.createApiKey(sheetApi.id, label || undefined);
+      const res = await api.createApiKey(sheetApi.id, {
+        label: label || undefined,
+        scopes,
+      });
+      setNovaChave({ key: res.apiKey.key, publica: res.apiIsPublic });
+      setCopiado(false);
       setLabel("");
       onUpdate();
     } finally {
@@ -286,28 +308,99 @@ function KeysTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => void }
     onUpdate();
   };
 
+  const copiar = (texto: string) => {
+    navigator.clipboard.writeText(texto);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  };
+
   return (
     <div className="space-y-4 max-w-lg">
       <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg p-5">
-        <h2 className="font-semibold text-[var(--text-primary)] mb-3">Criar Chave de API</h2>
-        <div className="flex gap-2">
-          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" placeholder="Rótulo (opcional)" />
-          <button onClick={handleCreate} disabled={creating} className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
-            Criar
+        <h2 className="font-semibold text-[var(--text-primary)] mb-1">Criar Chave de API</h2>
+        <p className="text-xs text-[var(--text-muted)] mb-4">
+          Funciona como <code className="font-mono">Authorization: Bearer</code> ou{" "}
+          <code className="font-mono">X-API-Key</code>. Pode ser revogada sozinha, sem
+          afetar o token dos outros consumidores.
+        </p>
+
+        <div className="flex gap-2 mb-4">
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} className="flex-1 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" placeholder="Rótulo (ex.: claude-analise-julho)" />
+          <button onClick={handleCreate} disabled={creating || scopes.length === 0} className="bg-[var(--accent)] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors">
+            {creating ? "Criando..." : "Criar"}
           </button>
         </div>
+
+        <fieldset>
+          <legend className="text-xs font-medium text-[var(--text-secondary)] mb-2">Permissões</legend>
+          <div className="flex flex-wrap gap-3">
+            {ESCOPOS.map((e) => (
+              <label key={e.valor} className="flex items-center gap-2 text-sm text-[var(--text-secondary)] cursor-pointer">
+                <input type="checkbox" checked={scopes.includes(e.valor)} onChange={() => toggleScope(e.valor)} className="accent-[var(--accent)]" />
+                {e.rotulo}
+                <span className="text-xs text-[var(--text-faint)]">({e.ajuda})</span>
+              </label>
+            ))}
+          </div>
+          {scopes.length === 0 && (
+            <p className="text-xs text-red-400 mt-2">Selecione ao menos uma permissão.</p>
+          )}
+        </fieldset>
       </div>
+
+      {novaChave && (
+        <div className="bg-[var(--card-bg)] border border-[var(--accent)] rounded-lg p-5">
+          <h3 className="font-semibold text-[var(--text-primary)] mb-1">Chave criada</h3>
+          <p className="text-xs text-[var(--text-muted)] mb-3">
+            Copie agora — ela <strong>não será exibida de novo</strong>. Se perder, revogue e crie outra.
+          </p>
+          <div className="flex gap-2 items-center">
+            <code className="flex-1 text-sm font-mono bg-[var(--input-bg)] px-3 py-2 rounded break-all text-[var(--text-secondary)]">
+              {novaChave.key}
+            </code>
+            <button onClick={() => copiar(novaChave.key)} className="bg-[var(--accent)] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[var(--accent-hover)] transition-colors shrink-0">
+              {copiado ? "Copiado!" : "Copiar"}
+            </button>
+          </div>
+          {novaChave.publica && (
+            <p className="text-xs text-amber-400 mt-3">
+              ⚠️ Esta API não tem Bearer Token nem Basic definido, então está{" "}
+              <strong>pública</strong> — a chave não restringe nada. Defina um Bearer Token
+              em Configurações para que o acesso passe a exigir credencial.
+            </p>
+          )}
+          <button onClick={() => setNovaChave(null)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] mt-3 transition-colors">
+            Já copiei, ocultar
+          </button>
+        </div>
+      )}
 
       {sheetApi.apiKeys && sheetApi.apiKeys.length > 0 ? (
         <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg divide-y divide-[var(--card-border)]">
           {sheetApi.apiKeys.map((k: any) => (
-            <div key={k.id} className="p-4 flex items-center justify-between">
-              <div>
-                <code className="text-sm font-mono bg-[var(--input-bg)] px-2 py-1 rounded text-[var(--text-secondary)]">{k.key}</code>
-                {k.label && <span className="ml-2 text-xs text-[var(--text-muted)]">{k.label}</span>}
-                <div className="text-xs text-[var(--text-faint)] mt-1">Criado em {new Date(k.createdAt).toLocaleDateString()}</div>
+            <div key={k.id} className="p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <code className="text-sm font-mono bg-[var(--input-bg)] px-2 py-1 rounded text-[var(--text-secondary)]">
+                    {k.keyPrefix ? `${k.keyPrefix}••••••••` : "••••••••"}
+                  </code>
+                  {k.label && <span className="text-xs text-[var(--text-muted)]">{k.label}</span>}
+                  {!k.active && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+                      inativa
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-[var(--text-faint)] mt-1">
+                  {(k.scopes ?? []).map((s: string) => s.replace("sheets:", "")).join(" · ") || "sem permissões"}
+                  {" — criada em "}
+                  {new Date(k.createdAt).toLocaleDateString()}
+                  {k.lastUsedAt
+                    ? ` · último uso ${new Date(k.lastUsedAt).toLocaleDateString()}`
+                    : " · nunca usada"}
+                </div>
               </div>
-              <button onClick={() => handleDelete(k.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors">
+              <button onClick={() => handleDelete(k.id)} className="text-red-400 text-xs hover:text-red-300 transition-colors shrink-0">
                 Revogar
               </button>
             </div>

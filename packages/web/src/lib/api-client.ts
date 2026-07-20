@@ -104,10 +104,29 @@ class ApiClient {
   }
 
   // API Keys
-  async createApiKey(apiId: string, label?: string) {
-    return this.fetch<{ apiKey: any }>(`/dashboard/apis/${apiId}/keys`, {
+  //
+  // The plaintext key comes back on this response and nowhere else — GET
+  // /dashboard/apis/:id only returns the prefix. Callers must surface it to the
+  // user immediately; there is no way to read it again.
+  async createApiKey(
+    apiId: string,
+    opts?: { label?: string; scopes?: string[]; expiresAt?: string | null }
+  ) {
+    return this.fetch<{
+      apiKey: {
+        id: string;
+        key: string;
+        keyPrefix: string | null;
+        label: string | null;
+        active: boolean;
+        scopes: string[];
+        expiresAt: string | null;
+        createdAt: string;
+      };
+      apiIsPublic: boolean;
+    }>(`/dashboard/apis/${apiId}/keys`, {
       method: "POST",
-      body: JSON.stringify({ label }),
+      body: JSON.stringify(opts ?? {}),
     });
   }
 

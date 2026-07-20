@@ -1,5 +1,5 @@
 /**
- * Tests for apiAuth dual-read (#99 bcrypt transition).
+ * Tests for apiAuth dual-read (#99 bcrypt transition) and API-key auth.
  *
  * Coverage targets:
  *   - Bearer with only plaintext (legacy)
@@ -10,10 +10,24 @@
  *   - Basic with only hash
  *   - No credential configured → endpoint public
  *   - Wrong password → 401
+ *   - API key via X-API-Key and via Authorization: Bearer
+ *   - API key scoped to the wrong SheetApi → 401 (does not leak that it exists)
+ *   - Inactive / expired / insufficient-scope keys
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import bcrypt from 'bcrypt';
 import { apiAuth } from './api-auth.js';
+import { findApiKeyByPlaintext } from '../lib/api-key-lookup.js';
+
+vi.mock('../lib/prisma.js', () => ({
+  prisma: { apiKey: { update: vi.fn().mockResolvedValue({}) } },
+}));
+
+vi.mock('../lib/api-key-lookup.js', () => ({
+  findApiKeyByPlaintext: vi.fn(),
+}));
+
+const lookup = vi.mocked(findApiKeyByPlaintext);
 
 const PASS = 'super-secret-token-xyz';
 let HASH: string;
@@ -34,16 +48,48 @@ function mockReply() {
 
 function mockRequest(opts: {
   authorization?: string;
+  apiKeyHeader?: string;
+  method?: string;
   sheetApi?: any;
 }): any {
   return {
-    headers: { authorization: opts.authorization ?? '' },
+    headers: {
+      authorization: opts.authorization ?? '',
+      ...(opts.apiKeyHeader ? { 'x-api-key': opts.apiKeyHeader } : {}),
+    },
+    method: opts.method ?? 'GET',
     sheetApi: opts.sheetApi,
   };
 }
 
+const ALL_SCOPES = ['sheets:read', 'sheets:write', 'sheets:delete'];
+
+/** An ApiKey row as findApiKeyByPlaintext would return it. */
+function keyRecord(over: Partial<Record<string, any>> = {}): any {
+  return {
+    id: 'key_1',
+    sheetApiId: 'api_1',
+    active: true,
+    scopes: ALL_SCOPES,
+    expiresAt: null,
+    lastUsedAt: null,
+    createdAt: new Date(),
+    ...over,
+  };
+}
+
+/**
+ * A SheetApi that already requires a credential. API keys only ever come into
+ * play on a gated API — a public one short-circuits before the key is read.
+ */
+function gatedApi(over: Partial<Record<string, any>> = {}): any {
+  return { id: 'api_1', bearerToken: PASS, bearerTokenHash: null, ...over };
+}
+
 beforeEach(() => {
   vi.useRealTimers();
+  lookup.mockReset();
+  lookup.mockResolvedValue(null);
 });
 
 describe('apiAuth — passthrough', () => {
@@ -242,5 +288,137 @@ describe('apiAuth — basic dual-read', () => {
       reply,
     );
     expect(reply.status).toHaveBeenCalledWith(401);
+  });
+});
+
+describe('apiAuth — API key', () => {
+  const KEY = 'b3f1c2d4-0000-4000-8000-abcdefabcdef';
+
+  it('accepts a valid key sent as X-API-Key', async () => {
+    lookup.mockResolvedValue(keyRecord());
+    const reply = mockReply();
+    await apiAuth(mockRequest({ apiKeyHeader: KEY, sheetApi: gatedApi() }), reply);
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it('accepts a valid key sent as Authorization: Bearer', async () => {
+    lookup.mockResolvedValue(keyRecord());
+    const reply = mockReply();
+    await apiAuth(mockRequest({ authorization: `Bearer ${KEY}`, sheetApi: gatedApi() }), reply);
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it("still accepts the API's own bearer token — consumers are unaffected", async () => {
+    const reply = mockReply();
+    await apiAuth(mockRequest({ authorization: `Bearer ${PASS}`, sheetApi: gatedApi() }), reply);
+    expect(reply.status).not.toHaveBeenCalled();
+    // The bearer token matched first, so the key lookup never ran.
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('rejects a valid key that belongs to a DIFFERENT SheetApi', async () => {
+    // The lookup is global; without the ownership check this key would unlock
+    // every spreadsheet on the account.
+    lookup.mockResolvedValue(keyRecord({ sheetApiId: 'outra_api' }));
+    const reply = mockReply();
+    await apiAuth(mockRequest({ apiKeyHeader: KEY, sheetApi: gatedApi() }), reply);
+    expect(reply.status).toHaveBeenCalledWith(401);
+    // Generic message — must not confirm the key exists somewhere else.
+    expect(reply.send).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'API_UNAUTHORIZED' }),
+    );
+  });
+
+  it('rejects an inactive key', async () => {
+    lookup.mockResolvedValue(keyRecord({ active: false }));
+    const reply = mockReply();
+    await apiAuth(mockRequest({ apiKeyHeader: KEY, sheetApi: gatedApi() }), reply);
+    expect(reply.status).toHaveBeenCalledWith(401);
+    expect(reply.send).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'INVALID_API_KEY' }),
+    );
+  });
+
+  it('rejects an expired key', async () => {
+    lookup.mockResolvedValue(keyRecord({ expiresAt: new Date(Date.now() - 1000) }));
+    const reply = mockReply();
+    await apiAuth(mockRequest({ apiKeyHeader: KEY, sheetApi: gatedApi() }), reply);
+    expect(reply.status).toHaveBeenCalledWith(401);
+    expect(reply.send).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'API_KEY_EXPIRED' }),
+    );
+  });
+
+  it('lets a read-only key read', async () => {
+    lookup.mockResolvedValue(keyRecord({ scopes: ['sheets:read'] }));
+    const reply = mockReply();
+    await apiAuth(
+      mockRequest({ apiKeyHeader: KEY, method: 'GET', sheetApi: gatedApi() }),
+      reply,
+    );
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it('blocks a read-only key from writing', async () => {
+    lookup.mockResolvedValue(keyRecord({ scopes: ['sheets:read'] }));
+    const reply = mockReply();
+    await apiAuth(
+      mockRequest({ apiKeyHeader: KEY, method: 'PUT', sheetApi: gatedApi() }),
+      reply,
+    );
+    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'INSUFFICIENT_SCOPES' }),
+    );
+  });
+
+  it('blocks DELETE for a key without sheets:delete', async () => {
+    lookup.mockResolvedValue(keyRecord({ scopes: ['sheets:read', 'sheets:write'] }));
+    const reply = mockReply();
+    await apiAuth(
+      mockRequest({ apiKeyHeader: KEY, method: 'DELETE', sheetApi: gatedApi() }),
+      reply,
+    );
+    expect(reply.status).toHaveBeenCalledWith(403);
+  });
+
+  it('allows a full-scope key to delete', async () => {
+    lookup.mockResolvedValue(keyRecord());
+    const reply = mockReply();
+    await apiAuth(
+      mockRequest({ apiKeyHeader: KEY, method: 'DELETE', sheetApi: gatedApi() }),
+      reply,
+    );
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it('treats an unrecognized method as a write — fails closed', async () => {
+    lookup.mockResolvedValue(keyRecord({ scopes: ['sheets:read'] }));
+    const reply = mockReply();
+    await apiAuth(
+      mockRequest({ apiKeyHeader: KEY, method: 'TRACE', sheetApi: gatedApi() }),
+      reply,
+    );
+    expect(reply.status).toHaveBeenCalledWith(403);
+  });
+
+  it('leaves a public API public and never looks a key up', async () => {
+    const reply = mockReply();
+    await apiAuth(
+      mockRequest({
+        apiKeyHeader: KEY,
+        sheetApi: {
+          id: 'api_1',
+          bearerToken: null,
+          bearerTokenHash: null,
+          basicUser: null,
+          basicPass: null,
+          basicPassHash: null,
+        },
+      }),
+      reply,
+    );
+    expect(reply.status).not.toHaveBeenCalled();
+    expect(lookup).not.toHaveBeenCalled();
   });
 });
