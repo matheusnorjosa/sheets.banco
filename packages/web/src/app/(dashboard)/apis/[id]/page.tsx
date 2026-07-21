@@ -193,6 +193,7 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
   const [cacheTtl, setCacheTtl] = useState(sheetApi.cacheTtlSeconds);
   const [rateLimitRpm, setRateLimitRpm] = useState(sheetApi.rateLimitRpm);
   const [bearerToken, setBearerToken] = useState(sheetApi.bearerToken || "");
+  const [authEnabled, setAuthEnabled] = useState(sheetApi.authEnabled !== false);
   const [msg, setMsg] = useState("");
 
   const handleSave = async () => {
@@ -203,6 +204,7 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
         name, allowRead, allowCreate, allowUpdate, allowDelete,
         cacheTtlSeconds: cacheTtl, rateLimitRpm,
         bearerToken: bearerToken || null,
+        authEnabled,
       });
       setMsg("Configurações salvas!");
       onUpdate();
@@ -251,6 +253,23 @@ function SettingsTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => vo
       <div>
         <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">Limite de Requisições (req/min)</label>
         <input type="number" value={rateLimitRpm} onChange={(e) => setRateLimitRpm(Number(e.target.value))} min={1} className="w-full bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-secondary)] focus:outline-none focus:border-[var(--accent)]" />
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)] cursor-pointer">
+          <input type="checkbox" checked={authEnabled} onChange={(e) => setAuthEnabled(e.target.checked)} className="rounded bg-[var(--input-bg)] border-[var(--input-border)]" />
+          Exigir autenticação
+        </label>
+        <p className="text-xs text-[var(--text-muted)] mt-1.5">
+          Desligar torna a API pública imediatamente, mas mantém o Bearer Token / chaves salvos —
+          religar volta a exigi-los sem precisar reconfigurar nada.
+        </p>
+        {!authEnabled && (
+          <p className="text-xs text-amber-400 mt-1.5">
+            ⚠️ Com isso desligado, qualquer um com o ID desta API lê e escreve os dados, mesmo com
+            um Bearer Token configurado abaixo.
+          </p>
+        )}
       </div>
 
       <div>
@@ -364,9 +383,9 @@ function KeysTab({ sheetApi, onUpdate }: { sheetApi: any; onUpdate: () => void }
           </div>
           {novaChave.publica && (
             <p className="text-xs text-amber-400 mt-3">
-              ⚠️ Esta API não tem Bearer Token nem Basic definido, então está{" "}
-              <strong>pública</strong> — a chave não restringe nada. Defina um Bearer Token
-              em Configurações para que o acesso passe a exigir credencial.
+              ⚠️ Esta API está <strong>pública</strong> (autenticação desligada, ou sem Bearer
+              Token/Basic definido) — a chave não restringe nada. Ajuste em Configurações para
+              que o acesso passe a exigir credencial.
             </p>
           )}
           <button onClick={() => setNovaChave(null)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] mt-3 transition-colors">

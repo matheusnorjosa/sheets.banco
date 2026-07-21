@@ -140,10 +140,12 @@ async function verifyApiKey(
 }
 
 /**
- * Middleware that checks per-API auth. Three credentials are accepted, in
- * order: the API's bearer token, basic auth, then an `ApiKey` row belonging to
- * this API (sent as `X-API-Key`, or as `Authorization: Bearer` so clients that
- * only speak bearer can use one).
+ * Middleware that checks per-API auth. `authEnabled` is the master switch —
+ * off, and the request passes regardless of what's stored below. On (the
+ * default), three credentials are accepted, in order: the API's bearer token,
+ * basic auth, then an `ApiKey` row belonging to this API (sent as
+ * `X-API-Key`, or as `Authorization: Bearer` so clients that only speak
+ * bearer can use one).
  *
  * Bearer token is tried first so consumer traffic — which always carries it —
  * never pays for the API-key database lookup.
@@ -157,6 +159,12 @@ async function verifyApiKey(
 export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
   const sheetApi = request.sheetApi;
   if (!sheetApi) return;
+
+  // Kill switch: pausing enforcement here — before any credential is even
+  // read — is what lets it double as an incident lever. Toggling this back on
+  // re-enforces whatever bearerToken/basicUser/API keys were already stored;
+  // nothing about them is touched while it's off.
+  if (sheetApi.authEnabled === false) return;
 
   const hasBearerAuth = !!sheetApi.bearerToken || !!sheetApi.bearerTokenHash;
   const hasBasicAuth = !!sheetApi.basicUser && (!!sheetApi.basicPass || !!sheetApi.basicPassHash);
