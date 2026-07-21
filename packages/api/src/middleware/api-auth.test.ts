@@ -117,6 +117,44 @@ describe('apiAuth — passthrough', () => {
   });
 });
 
+describe('apiAuth — authEnabled kill switch', () => {
+  it('lets a request through when authEnabled is false, even with a correct bearer token present', async () => {
+    // The switch short-circuits before any credential is read — flipping it
+    // back on must re-enforce the same stored token, so nothing here clears it.
+    const reply = mockReply();
+    await apiAuth(mockRequest({ sheetApi: gatedApi({ authEnabled: false }) }), reply);
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it('lets a request through when authEnabled is false, with a WRONG bearer token', async () => {
+    const reply = mockReply();
+    await apiAuth(
+      mockRequest({
+        authorization: 'Bearer totally-wrong',
+        sheetApi: gatedApi({ authEnabled: false }),
+      }),
+      reply,
+    );
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it('never looks up an API key when authEnabled is false', async () => {
+    const reply = mockReply();
+    await apiAuth(
+      mockRequest({ apiKeyHeader: 'whatever', sheetApi: gatedApi({ authEnabled: false }) }),
+      reply,
+    );
+    expect(reply.status).not.toHaveBeenCalled();
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('still enforces the bearer token when authEnabled is true (default)', async () => {
+    const reply = mockReply();
+    await apiAuth(mockRequest({ sheetApi: gatedApi({ authEnabled: true }) }), reply);
+    expect(reply.status).toHaveBeenCalledWith(401);
+  });
+});
+
 describe('apiAuth — bearer dual-read', () => {
   it('accepts a token verified against the legacy plaintext column', async () => {
     const reply = mockReply();

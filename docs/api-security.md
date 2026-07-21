@@ -41,6 +41,24 @@ Steps 1–4 are `onRequest` / `preHandler` hooks in `packages/api/src/routes/v1/
 | Webhook receiver wanting outbound signing | Bearer (or none) + HMAC v2 for writes |
 | Ad-hoc client / scripting agent | Scoped API key (read-only unless it must write) |
 
+## Auth kill switch
+
+`authEnabled` (default `true`) is a separate toggle from having a credential
+configured. `apiAuth` checks it before reading `bearerToken`/`basicUser`/API
+keys at all — off, and the request passes regardless of what's stored.
+
+This exists because the only way to make a gated API public *without* it was
+to null out `bearerToken`, discarding the value. Flip `authEnabled` off to
+pause enforcement (unblock a consumer mid-incident, run a one-off test) and
+back on to re-enforce the exact same stored credential — nothing about it is
+touched while the switch is off.
+
+```bash
+curl -X PATCH "$BASE/dashboard/apis/SEU_API_ID" \
+  -H "Authorization: Bearer $JWT" -H 'Content-Type: application/json' \
+  -d '{"authEnabled": false}'
+```
+
 ## API keys
 
 The bearer token is a single shared secret per API: everything that calls the

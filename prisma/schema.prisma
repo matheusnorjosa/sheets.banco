@@ -59,6 +59,13 @@ model SheetApi {
   basicPass                String?
   basicPassHash            String?
 
+  // Kill switch, independent of whether a credential is stored. Lets an
+  // operator pause enforcement (e.g. to unblock a consumer mid-incident)
+  // without discarding bearerToken/basicPass — flip it back on and the same
+  // credential is enforced again. Defaults true so existing rows keep
+  // whatever protection their stored credential already implies.
+  authEnabled Boolean @default(true)
+
   // HMAC Request Signing
   hmacSecret     String?
   requireSigning Boolean @default(false)

@@ -24,6 +24,7 @@ export interface SheetApi {
   basicUser: string | null;
   basicPass: string | null;
   basicPassHash: string | null;
+  authEnabled: boolean;
   hmacSecret: string | null;
   requireSigning: boolean;
   corsOrigins: string | null;

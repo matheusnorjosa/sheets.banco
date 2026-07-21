@@ -32,6 +32,7 @@ const updateApiSchema = z.object({
   bearerToken: z.string().nullable().optional(),
   basicUser: z.string().nullable().optional(),
   basicPass: z.string().nullable().optional(),
+  authEnabled: z.boolean().optional(),
   corsOrigins: z.string().nullable().optional(),
   ipWhitelist: z.string().nullable().optional(),
   rateLimitRpm: z.number().min(1).optional(),
@@ -342,10 +343,12 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     // never on the row we echo back from any other route.
     return reply.status(201).send({
       apiKey: { ...apiKey, key: plaintext },
-      // The API is only actually gated if it has a bearer/basic credential.
-      // Without one it stays public and this key restricts nothing — the
-      // dashboard surfaces this as a warning next to the new key.
-      apiIsPublic: !existing.bearerToken && !existing.bearerTokenHash && !existing.basicUser,
+      // The API is only actually gated if authEnabled is on AND it has a
+      // bearer/basic credential. Without either, it's public and this key
+      // restricts nothing — the dashboard surfaces this as a warning next to
+      // the new key.
+      apiIsPublic:
+        !existing.authEnabled || (!existing.bearerToken && !existing.bearerTokenHash && !existing.basicUser),
     });
   });
 
