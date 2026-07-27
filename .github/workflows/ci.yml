@@ -74,6 +74,38 @@ jobs:
       - name: Módulos importam no Node ESM
         run: npm run verify:imports -w packages/api
 
+  # Até este job existir, só o `packages/api` tinha teste. O `sdk` é o pacote
+  # que OUTROS projetos instalam — erro ali aparece na casa dos outros —, o
+  # `cli` grava o token do usuário em disco, e o `api-client` do web é por onde
+  # todo o dashboard fala com a API. Os três estavam sem um teste sequer.
+  #
+  # Escopo deliberado: só lógica pura, ambiente `node`. Componente React fica
+  # de fora (exigiria jsdom + testing-library), e por isso a cobertura do `web`
+  # mede apenas os `.ts` — misturar "não testado" com "fora de escopo" no mesmo
+  # número tornaria o número inútil.
+  pacotes:
+    name: SDK, CLI e Web — Testes
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        pacote: [sdk, cli, web]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Testes + cobertura (${{ matrix.pacote }})
+        run: npm run test:coverage -w packages/${{ matrix.pacote }}
+
   web:
     name: Web — Build
     runs-on: ubuntu-latest
