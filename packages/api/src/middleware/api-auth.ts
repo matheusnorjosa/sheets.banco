@@ -226,6 +226,21 @@ export async function apiAuth(request: FastifyRequest, reply: FastifyReply) {
     (typeof rawKeyHeader === 'string' ? rawKeyHeader : undefined) ||
     (authHeader.startsWith('Bearer ') ? authHeader.slice(7) : undefined);
 
+  // CodeQL js/user-controlled-bypass (alerta #52) aponta o `if` abaixo como
+  // "condição controlada pelo usuário protegendo ação sensível". É falso
+  // positivo, e vale registrar por quê — é código de autenticação, e daqui a
+  // seis meses ninguém lembra:
+  //
+  // O `if` não autoriza nada. Ele só decide se vale a pena TENTAR verificar.
+  // Quem autoriza é `outcome.ok`, que só vem `true` depois de verifyApiKey()
+  // confirmar, contra o banco: bcrypt.compare bateu; a chave pertence a ESTA
+  // SheetApi; está ativa; não expirou; e o escopo cobre o método HTTP. Nada
+  // disso é controlável pelo cliente. Sem header → cai no 401 do fim; com
+  // header inválido → o mesmo 401. Não existe caminho em que dado do usuário
+  // pule a verificação.
+  //
+  // O CodeQL sinaliza o padrão `if (dadoDoUsuário)` seguido de `return` num
+  // arquivo de auth, sem avaliar o que verifyApiKey faz dentro.
   if (keyCandidate) {
     const outcome = await verifyApiKey(keyCandidate, sheetApi.id, request.method);
 

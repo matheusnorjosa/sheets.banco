@@ -25,14 +25,27 @@ jobs:
 
       - run: npm ci
 
-      # --audit-level=high fails on high+critical; moderate is still surfaced
-      # in the job summary but doesn't block.
-      - name: Run npm audit
+      # O que BLOQUEIA é o workspace da API: é o único que roda como servidor
+      # exposto na internet, e é exatamente o que o Dockerfile instala
+      # (`npm ci --workspace=packages/api --workspace=packages/shared`).
+      # --audit-level=high falha em high+critical; moderate aparece no resumo.
+      - name: Audit da API (bloqueia)
         run: |
-          npm audit --omit=dev --audit-level=high || EXIT=$?
-          echo "exit_code=${EXIT:-0}" >> $GITHUB_STEP_SUMMARY
-          npm audit --omit=dev || true
+          npm audit --omit=dev --workspace=packages/api --audit-level=high || EXIT=$?
+          echo "api_exit=${EXIT:-0}" >> $GITHUB_STEP_SUMMARY
           exit ${EXIT:-0}
+
+      # O monorepo inteiro é auditado e reportado, mas NÃO bloqueia. Motivo:
+      # packages/web (Next na Vercel) arrasta advisories cujo único "fix"
+      # oferecido pelo npm é DESCER de major (next 16 -> 14.2.35). Falhar o
+      # build por algo sem correção real transforma o gate em ruído
+      # permanente e treina todo mundo a ignorá-lo.
+      # Revisar quando sair Next com correção; se aparecer algo acionável
+      # aqui, tratar na hora.
+      - name: Audit do monorepo (informativo)
+        run: |
+          echo '### Audit do monorepo (não bloqueia)' >> $GITHUB_STEP_SUMMARY
+          npm audit --omit=dev 2>&1 | tee -a $GITHUB_STEP_SUMMARY || true
 
   secret-scan:
     name: Secret scan (trufflehog)
