@@ -104,7 +104,18 @@ export async function webhookRoutes(app: FastifyInstance) {
     const api = await prisma.sheetApi.findFirst({ where: { id, userId } });
     if (!api) throw new NotFoundError('API not found.');
 
-    await prisma.webhookSubscription.delete({ where: { id: webhookId } });
+    // `deleteMany` com o par (id, sheetApiId) em vez de `delete` por id: a
+    // checagem acima prova que o usuário é dono da API `id`, mas NÃO que o
+    // `webhookId` pertence a ela. Apagar só pelo id deixava qualquer dono de
+    // qualquer API apagar webhook de outro usuário — o PATCH logo acima já
+    // fazia a amarração certa. Como bônus, `deleteMany` devolve `count` em vez
+    // de estourar P2025 (500) quando o registro não existe, então o "não
+    // encontrado" vira 404 de verdade.
+    const { count } = await prisma.webhookSubscription.deleteMany({
+      where: { id: webhookId, sheetApiId: id },
+    });
+    if (count === 0) throw new NotFoundError('Webhook not found.');
+
     return { deleted: true };
   });
 
@@ -115,6 +126,16 @@ export async function webhookRoutes(app: FastifyInstance) {
 
     const api = await prisma.sheetApi.findFirst({ where: { id, userId } });
     if (!api) throw new NotFoundError('API not found.');
+
+    // Mesma amarração do PATCH e do DELETE: ser dono da API `id` não implica
+    // que `webhookId` seja dela. Sem esta checagem, o histórico de entregas de
+    // qualquer webhook vazava para quem soubesse o id — e o payload das
+    // deliveries carrega os dados das linhas da planilha.
+    const subscription = await prisma.webhookSubscription.findFirst({
+      where: { id: webhookId, sheetApiId: id },
+      select: { id: true },
+    });
+    if (!subscription) throw new NotFoundError('Webhook not found.');
 
     const deliveries = await prisma.webhookDelivery.findMany({
       where: { subscriptionId: webhookId },

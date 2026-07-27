@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { parseExpression } from 'cron-parser';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
@@ -7,11 +8,37 @@ import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import { updateSyncSchedule, removeSyncSchedule } from '../../queues/scheduled-sync.queue.js';
 import { invalidateSheetApiCache } from '../../services/sheet-api-cache.service.js';
 
-const cronRegex = /^(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)\s+(\*|[0-9,\-/]+)$/;
+// Valida a expressão com o MESMO parser que vai executá-la: o `cron-parser`,
+// na versão que o BullMQ já fixa para agendar job repetível.
+//
+// Antes havia aqui uma regex escrita à mão, e ela tinha divergido da gramática
+// real nas duas direções. Recusava passo, porque a classe `[0-9,\-/]` não
+// contém `*` e a alternativa `\*` só casava com asterisco sozinho — ou seja,
+// recusava `*/15 * * * *`, que era o exemplo citado na própria mensagem de
+// erro. Com isso, nenhuma sincronização por intervalo podia ser salva. E na
+// outra direção aceitava lixo (`- - - - -`, `99 99 99 99 99`), que só ia
+// falhar lá na frente, dentro do worker, longe de quem digitou.
+//
+// Usar o parser de verdade elimina a possibilidade de a regra daqui divergir
+// do que a fila aceita.
+function cronValido(expressao: string): boolean {
+  // O `cron-parser` também aceita 4 e 6 campos (6 = com segundos). Exigimos 5
+  // porque é o formato que o dashboard documenta e o único que a UI monta;
+  // aceitar 4 campos silenciosamente agendaria algo diferente do que a pessoa
+  // leu na tela.
+  if (expressao.trim().split(/\s+/).length !== 5) return false;
+
+  try {
+    parseExpression(expressao);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const updateSyncSchema = z.object({
   syncEnabled: z.boolean(),
-  syncCron: z.string().regex(cronRegex, 'Invalid cron expression (e.g., "*/15 * * * *")').nullable().optional(),
+  syncCron: z.string().refine(cronValido, 'Invalid cron expression (e.g., "*/15 * * * *")').nullable().optional(),
 });
 
 function getUserId(request: any): string {
