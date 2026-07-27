@@ -22,19 +22,24 @@ export async function dispatchWebhooks(
     });
 
     for (const sub of subscriptions) {
-      // Create delivery record (id not needed locally — worker reads from queue)
-      await prisma.webhookDelivery.create({
+      // O id da entrega É necessário aqui: é ele que o worker usa para
+      // atualizar a linha depois. Antes o `create` descartava o retorno, com o
+      // comentário "id not needed locally — worker reads from queue", e o
+      // worker tentava casar pelo `job.id` do BullMQ — que é outro número.
+      const delivery = await prisma.webhookDelivery.create({
         data: {
           subscriptionId: sub.id,
           event,
           payload: payload as any,
           status: 'pending',
         },
+        select: { id: true },
       });
 
       // Enqueue for async delivery
       await enqueueWebhookDelivery({
         subscriptionId: sub.id,
+        deliveryId: delivery.id,
         url: sub.url,
         secret: sub.secret,
         event,

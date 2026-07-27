@@ -10,7 +10,7 @@ const log = logger.child({ component: 'worker:webhook-delivery' });
 let worker: Worker<WebhookDeliveryJobData> | null = null;
 
 async function processJob(job: Job<WebhookDeliveryJobData>): Promise<void> {
-  const { subscriptionId, url, secret, event, payload } = job.data;
+  const { subscriptionId, deliveryId, url, secret, event, payload } = job.data;
 
   const body = JSON.stringify(payload);
   const timestamp = Math.floor(Date.now() / 1000);
@@ -32,7 +32,10 @@ async function processJob(job: Job<WebhookDeliveryJobData>): Promise<void> {
       headers: {
         'Content-Type': 'application/json',
         'X-Webhook-Event': event,
-        'X-Webhook-Delivery-Id': job.id ?? '',
+        // O id da ENTREGA, não o do job. O `job.id` do BullMQ é sequencial e
+        // reciclável entre limpezas da fila, então consumidor que usasse esse
+        // header para idempotência podia deduplicar entregas distintas.
+        'X-Webhook-Delivery-Id': deliveryId,
         'X-Webhook-Timestamp': String(timestamp),
         'X-Signature-256': `sha256=${signature}`,
       },
@@ -42,7 +45,7 @@ async function processJob(job: Job<WebhookDeliveryJobData>): Promise<void> {
 
     // Update delivery record
     await prisma.webhookDelivery.updateMany({
-      where: { subscriptionId, id: job.id ?? undefined },
+      where: { id: deliveryId, subscriptionId },
       data: {
         status: response.ok ? 'success' : 'failed',
         attempts: job.attemptsMade + 1,
@@ -56,7 +59,7 @@ async function processJob(job: Job<WebhookDeliveryJobData>): Promise<void> {
   } catch (err) {
     // Update delivery attempt count
     await prisma.webhookDelivery.updateMany({
-      where: { subscriptionId, id: job.id ?? undefined },
+      where: { id: deliveryId, subscriptionId },
       data: {
         status: job.attemptsMade + 1 >= 5 ? 'failed' : 'pending',
         attempts: job.attemptsMade + 1,

@@ -3,6 +3,16 @@ import { buildJobOptions } from '../lib/queue-options.js';
 
 export interface WebhookDeliveryJobData {
   subscriptionId: string;
+  /**
+   * Id da linha em `WebhookDelivery` que este job atualiza.
+   *
+   * Precisa viajar no payload porque o `job.id` do BullMQ é um contador da
+   * fila ('1', '2', '3'…) e o id da entrega é um cuid do Prisma. O worker
+   * antes atualizava por `job.id` e não casava com linha nenhuma, então toda
+   * entrega ficava 'pending' para sempre no histórico do dashboard — inclusive
+   * as entregues com 200.
+   */
+  deliveryId: string;
   url: string;
   secret: string;
   event: string;
