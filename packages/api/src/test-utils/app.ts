@@ -3,17 +3,21 @@
  *
  * O `app.inject()` do Fastify executa o ciclo completo — hooks, validação,
  * serialização, error handler — sem abrir porta nem fazer I/O de rede. É o que
- * permite testar as rotas (hoje com 0% de cobertura) sem subir a stack toda.
+ * permite testar rota de verdade sem subir a stack toda.
  *
  * O que NÃO entra aqui de propósito: Redis, BullMQ, workers e os plugins de
  * infraestrutura. Cada teste registra só a rota que exercita, mais o error
- * handler real do `index.ts`, que é o que traduz AppError → resposta JSON. Se
- * o teste importasse `index.ts` inteiro ele tentaria conectar em Redis/Postgres
- * na importação e deixaria de ser teste unitário.
+ * handler REAL da aplicação (`lib/error-handler.ts`), que traduz AppError em
+ * resposta JSON.
+ *
+ * Para exercitar a aplicação inteira — todos os plugins e todas as rotas —
+ * use o `buildApp()` de `src/app.ts`, que também não abre porta. Este helper
+ * existe para o caso oposto: isolar UMA rota e deixar o teste em
+ * milissegundos.
  */
-import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
-import { AppError } from '../lib/errors.js';
+import { registerErrorHandler } from '../lib/error-handler.js';
 
 /**
  * Lê o argumento de uma chamada de mock com segurança de tipo.
@@ -44,78 +48,17 @@ interface Opts {
   prefixo?: string;
 }
 
-/**
- * Réplica do error handler de `index.ts`. Duplicado de propósito: importar o
- * `index.ts` aqui puxaria Redis, filas e workers. O acoplamento é aceito em
- * troca de o teste rodar em milissegundos — mas se o handler lá mudar, este
- * precisa mudar junto.
- */
-function registrarErrorHandler(app: FastifyInstance) {
-  // `error: Error` explícito espelha o index.ts. Sem a anotação o TS infere
-  // `unknown` nesta versão do Fastify e nada abaixo compila.
-  app.setErrorHandler((error: Error, request, reply) => {
-    const requestId = request.id;
-    reply.header('X-Request-Id', requestId);
-
-    if (error instanceof AppError) {
-      return reply.status(error.statusCode).send({
-        error: true,
-        message: error.message,
-        code: error.code,
-        statusCode: error.statusCode,
-        request_id: requestId,
-      });
-    }
-
-    const err = error as FastifyError & { validation?: unknown };
-
-    if (err.statusCode === 429) {
-      return reply.status(429).send({
-        error: true,
-        message: 'Too many requests. Please slow down.',
-        code: 'RATE_LIMIT_EXCEEDED',
-        statusCode: 429,
-        request_id: requestId,
-      });
-    }
-
-    if (err.validation) {
-      return reply.status(400).send({
-        error: true,
-        message: error.message,
-        code: 'VALIDATION_ERROR',
-        statusCode: 400,
-        request_id: requestId,
-      });
-    }
-
-    if (typeof err.statusCode === 'number' && err.statusCode >= 400 && err.statusCode < 500) {
-      return reply.status(err.statusCode).send({
-        error: true,
-        message: error.message,
-        code: err.code ?? 'CLIENT_ERROR',
-        statusCode: err.statusCode,
-        request_id: requestId,
-      });
-    }
-
-    return reply.status(500).send({
-      error: true,
-      message: 'Internal server error',
-      code: 'INTERNAL_ERROR',
-      statusCode: 500,
-      request_id: requestId,
-    });
-  });
-}
-
 export async function montarApp({ rotas, prefixo }: Opts): Promise<FastifyInstance> {
   // `logger: false` mantém a saída do teste limpa; um erro esperado (401, 409)
   // não deve poluir o terminal com stack trace.
   const app = Fastify({ logger: false });
 
   await app.register(fastifyJwt, { secret: JWT_SECRET, sign: { expiresIn: '24h' } });
-  registrarErrorHandler(app);
+  // O handler REAL, o mesmo que o `app.ts` registra. Antes havia aqui uma
+  // cópia manual dele, porque importar o `index.ts` puxaria Redis, filas e
+  // workers na importação — o preço era o risco de as duas versões divergirem
+  // em silêncio. Extraí-lo para `lib/error-handler.ts` eliminou a escolha.
+  registerErrorHandler(app);
   await app.register(rotas, prefixo ? { prefix: prefixo } : {});
   await app.ready();
 
