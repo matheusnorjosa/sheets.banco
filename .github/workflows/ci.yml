@@ -30,6 +30,39 @@ jobs:
       - name: Typecheck API
         run: npm run typecheck -w packages/api
 
+  # Até este job existir, os testes do `packages/api` NUNCA rodavam no CI: só
+  # lint, typecheck e build. A suíte inteira (e a catraca de cobertura em
+  # `vitest.config.ts`) dependia de alguém lembrar de rodar `npm test` na
+  # máquina local antes de abrir o PR — ou seja, não protegia nada.
+  #
+  # `test:coverage` roda `vitest run --coverage`, e os `thresholds` da config
+  # fazem o comando sair diferente de zero quando a cobertura CAI. É isso que
+  # transforma os limiares de número decorativo em catraca de verdade.
+  # A regra continua: subir os limiares quando a cobertura sobe, nunca baixar
+  # para o build passar.
+  test:
+    name: API — Testes & cobertura
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # `coverage.all: true` faz o v8 instrumentar todo `src/**/*.ts`, inclusive
+      # os que nenhum teste importa. Alguns deles importam `@prisma/client`, que
+      # não existe antes do generate.
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema prisma/schema.prisma
+
+      - name: Testes + cobertura
+        run: npm run test:coverage -w packages/api
+
   web:
     name: Web — Build
     runs-on: ubuntu-latest
