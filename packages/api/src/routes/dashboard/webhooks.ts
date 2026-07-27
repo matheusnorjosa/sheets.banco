@@ -6,6 +6,7 @@ import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import { encrypt } from '../../lib/secret-cipher.js';
+import { auditarRequisicao } from '../../services/audit.service.js';
 
 const createWebhookSchema = z.object({
   url: z.string().url(),
@@ -71,6 +72,15 @@ export async function webhookRoutes(app: FastifyInstance) {
       },
     });
 
+    auditarRequisicao(request, {
+      action: 'webhook.created',
+      resourceType: 'WebhookSubscription',
+      resourceId: webhook.id,
+      sheetApiId: id,
+      // URL e eventos entram na trilha; o segredo, nunca.
+      changes: { url: { old: null, new: webhook.url }, events: { old: null, new: parsed.data.events } },
+    });
+
     return reply.status(201).send({ webhook: { ...webhook, secret: secretPlain } });
   });
 
@@ -115,6 +125,13 @@ export async function webhookRoutes(app: FastifyInstance) {
       where: { id: webhookId, sheetApiId: id },
     });
     if (count === 0) throw new NotFoundError('Webhook not found.');
+
+    auditarRequisicao(request, {
+      action: 'webhook.deleted',
+      resourceType: 'WebhookSubscription',
+      resourceId: webhookId,
+      sheetApiId: id,
+    });
 
     return { deleted: true };
   });

@@ -9,6 +9,7 @@ import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
 import bcrypt from 'bcrypt';
 import { invalidateSheetApiCache } from '../../services/sheet-api-cache.service.js';
+import { auditarRequisicao, diffAuditavel } from '../../services/audit.service.js';
 import { encrypt } from '../../lib/secret-cipher.js';
 import { deriveKeyPrefix } from '../../lib/api-key-lookup.js';
 
@@ -123,6 +124,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       },
     });
 
+    auditarRequisicao(request, {
+      action: 'api.created',
+      resourceType: 'SheetApi',
+      resourceId: sheetApi.id,
+      sheetApiId: sheetApi.id,
+    });
+
     return reply.status(201).send({ api: sheetApi });
   });
 
@@ -194,6 +202,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     // Pass the old slug in case the rename left a stale cache key.
     await invalidateSheetApiCache(api, existing.slug);
 
+    auditarRequisicao(request, {
+      action: 'api.updated',
+      resourceType: 'SheetApi',
+      resourceId: id,
+      sheetApiId: id,
+      // `data` (o que foi escrito), não `parsed.data` — assim o hash gerado no
+      // dual-write também aparece como campo alterado, marcado como presença.
+      changes: diffAuditavel(existing as Record<string, unknown>, data),
+    });
+
     return { api };
   });
 
@@ -243,6 +261,18 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
     await invalidateSheetApiCache(existing);
 
+    auditarRequisicao(request, {
+      action: 'api.deleted',
+      resourceType: 'SheetApi',
+      resourceId: id,
+      // Sem `sheetApiId` de propósito: a linha da SheetApi acabou de ser
+      // apagada e a FK não teria para onde apontar. É a mesma razão pela qual
+      // a transação acima faz `auditLog.updateMany({ sheetApiId: null })` nas
+      // entradas antigas — o schema foi desenhado para a trilha SOBREVIVER à
+      // exclusão da API, que é justamente quando ela mais importa.
+      changes: { name: { old: existing.name, new: null }, slug: { old: existing.slug, new: null } },
+    });
+
     return { deleted: true };
   });
 
@@ -271,6 +301,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
     await invalidateSheetApiCache(existing);
 
+    auditarRequisicao(request, {
+      action: 'api.bearer_rotated',
+      resourceType: 'SheetApi',
+      resourceId: id,
+      sheetApiId: id,
+    });
+
     return {
       bearerToken: newToken,
       previousTokenValidUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour grace
@@ -296,6 +333,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
 
     await invalidateSheetApiCache(existing);
+
+    auditarRequisicao(request, {
+      action: 'api.hmac_rotated',
+      resourceType: 'SheetApi',
+      resourceId: id,
+      sheetApiId: id,
+    });
 
     return { hmacSecret, requireSigning: true };
   });
@@ -339,6 +383,15 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       },
     });
 
+    auditarRequisicao(request, {
+      action: 'api_key.created',
+      resourceType: 'ApiKey',
+      resourceId: apiKey.id,
+      sheetApiId: id,
+      // Escopo e rótulo entram na trilha; o plaintext e o hash, nunca.
+      changes: { scopes: { old: null, new: apiKey.scopes }, label: { old: null, new: apiKey.label } },
+    });
+
     // `key` is spread in separately so it exists only on this response body —
     // never on the row we echo back from any other route.
     return reply.status(201).send({
@@ -364,6 +417,15 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     if (!key) throw new NotFoundError('API key not found.');
 
     await prisma.apiKey.delete({ where: { id: keyId } });
+
+    auditarRequisicao(request, {
+      action: 'api_key.revoked',
+      resourceType: 'ApiKey',
+      resourceId: keyId,
+      sheetApiId: id,
+      changes: { keyPrefix: { old: key.keyPrefix, new: null } },
+    });
+
     return { deleted: true };
   });
 
