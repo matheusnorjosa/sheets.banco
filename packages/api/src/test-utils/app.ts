@@ -17,7 +17,7 @@
  */
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
-import { registerErrorHandler } from '../lib/error-handler.js';
+import { registerErrorHandler, registerNotFoundHandler } from '../lib/error-handler.js';
 
 /**
  * Lê o argumento de uma chamada de mock com segurança de tipo.
@@ -59,6 +59,7 @@ export async function montarApp({ rotas, prefixo }: Opts): Promise<FastifyInstan
   // workers na importação — o preço era o risco de as duas versões divergirem
   // em silêncio. Extraí-lo para `lib/error-handler.ts` eliminou a escolha.
   registerErrorHandler(app);
+  registerNotFoundHandler(app);
   await app.register(rotas, prefixo ? { prefix: prefixo } : {});
   await app.ready();
 

@@ -89,16 +89,15 @@ describe('rotas registradas — nenhuma pode sumir sem quebrar teste', () => {
   /**
    * Uma rota é considerada registrada se o roteador do Fastify a resolve.
    *
-   * O discriminador é o FORMATO do 404, não o status: uma rota registrada pode
+   * O discriminador é o `code`, não o status: uma rota registrada pode
    * legitimamente responder 404 (API não encontrada no banco), e nesse caso o
-   * corpo vem no formato da casa (`error: true`). Rota inexistente cai no
-   * handler embutido do Fastify, que responde `{"error":"Not Found"}` — string,
-   * não booleano. Ver o `describe` do 404 mais abaixo.
+   * `code` é `NOT_FOUND`. Só o handler de rota desconhecida usa
+   * `ROUTE_NOT_FOUND`. Ver o `describe` do 404 mais abaixo.
    */
   async function existe(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string) {
     const r = await app.inject({ method, url });
     if (r.statusCode !== 404) return true;
-    return r.json().error !== 'Not Found';
+    return r.json().code !== 'ROUTE_NOT_FOUND';
   }
 
   it.each([
@@ -163,40 +162,53 @@ describe('GET /openapi.json', () => {
   });
 });
 
-describe('ACHADO: o 404 de rota desconhecida NÃO passa pelo error handler', () => {
-  // O Fastify tem um handler de "não encontrado" separado (`setNotFoundHandler`),
-  // e a aplicação não registra nenhum. Então o 404 de rota inexistente é o
-  // embutido do framework e escapa do `setErrorHandler` inteiro.
-  //
-  // Consequência: `docs/error-handling.md` diz que TODA resposta de erro leva
-  // `request_id` e o header `X-Request-Id`. Isso vale para tudo que passa pelo
-  // handler — inclusive o 404 de "API não encontrada", que é um AppError — mas
-  // NÃO para quem errou a URL. Quem digitou o caminho errado recebe um erro de
-  // formato diferente e sem id para correlacionar com o log.
-  //
-  // Corrigir é um `app.setNotFoundHandler` de poucas linhas. Estes testes
-  // travam o comportamento de hoje e falham de propósito quando isso for feito.
+describe('404 de rota desconhecida sai no formato da casa', () => {
+  // O Fastify não manda o 404 de rota desconhecida para o `setErrorHandler` —
+  // tem um caminho próprio, o `setNotFoundHandler`. Antes a aplicação não
+  // registrava nenhum, e o embutido do framework respondia
+  // `{"error":"Not Found"}` — sem `error: true`, sem `code`, sem `request_id`
+  // e sem o header `X-Request-Id`, contrariando o que
+  // `docs/error-handling.md` promete para toda resposta de erro. Atingia só
+  // quem digitou a URL errada; o 404 de "API não encontrada" é um AppError e
+  // sempre saiu certo.
 
-  it('responde no formato do Fastify, não no da casa', async () => {
+  it('responde com error:true, code e statusCode', async () => {
     const r = await app.inject({ method: 'GET', url: '/nao-existe' });
 
     expect(r.statusCode).toBe(404);
-    expect(r.json()).toEqual({
+    expect(r.json()).toMatchObject({
+      error: true,
       message: 'Route GET:/nao-existe not found',
-      error: 'Not Found', // string, não `true` como no formato da casa
+      code: 'ROUTE_NOT_FOUND',
       statusCode: 404,
     });
   });
 
-  it('não leva request_id nem o header X-Request-Id', async () => {
+  it('leva request_id e o header X-Request-Id, ecoando o do cliente', async () => {
     const r = await app.inject({
       method: 'GET',
       url: '/nao-existe',
       headers: { 'x-request-id': 'req-do-cliente-123' },
     });
 
-    expect(r.json().request_id).toBeUndefined();
-    expect(r.headers['x-request-id']).toBeUndefined();
+    expect(r.json().request_id).toBe('req-do-cliente-123');
+    expect(r.headers['x-request-id']).toBe('req-do-cliente-123');
+  });
+
+  it('gera request_id próprio quando o cliente não manda', async () => {
+    const r = await app.inject({ method: 'GET', url: '/nao-existe' });
+    expect(r.json().request_id).toMatch(/^req_/);
+    expect(r.headers['x-request-id']).toBe(r.json().request_id);
+  });
+
+  it('o formato bate com o dos demais erros da API', async () => {
+    // O ponto do PR: um cliente que trate erro genericamente não precisa de
+    // caso especial para URL errada.
+    const naoEncontrado = await app.inject({ method: 'GET', url: '/nao-existe' });
+    const validacao = await app.inject({ method: 'POST', url: '/auth/login', payload: {} });
+
+    expect(Object.keys(naoEncontrado.json()).sort())
+      .toEqual(Object.keys(validacao.json()).sort());
   });
 });
 

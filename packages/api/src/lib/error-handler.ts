@@ -16,6 +16,38 @@ import { AppError } from './errors.js';
  * `X-Request-Id`, para correlacionar relato de cliente com log de servidor
  * (ver `docs/error-handling.md`).
  */
+/**
+ * Handler de rota não encontrada.
+ *
+ * Precisa ser registrado à parte porque o Fastify **não** manda o 404 de rota
+ * desconhecida para o `setErrorHandler` — ele tem um caminho próprio. Sem
+ * este registro, o embutido do framework responde
+ *
+ *     {"message":"Route GET:/x not found","error":"Not Found","statusCode":404}
+ *
+ * sem `error: true`, sem `code`, sem `request_id` e sem o header
+ * `X-Request-Id`. Ou seja: quem erra a URL recebia um erro de formato
+ * diferente de todos os outros e sem id para correlacionar com o log,
+ * contrariando o que `docs/error-handling.md` promete para toda resposta de
+ * erro. O 404 de "API não encontrada" sempre saiu certo, porque é um
+ * `AppError` e passa pelo handler acima — a divergência atingia só quem
+ * digitou o caminho errado.
+ */
+export function registerNotFoundHandler(app: FastifyInstance) {
+  app.setNotFoundHandler((request, reply) => {
+    const requestId = request.id;
+    reply.header('X-Request-Id', requestId);
+
+    return reply.status(404).send({
+      error: true,
+      message: `Route ${request.method}:${request.url} not found`,
+      code: 'ROUTE_NOT_FOUND',
+      statusCode: 404,
+      request_id: requestId,
+    });
+  });
+}
+
 export function registerErrorHandler(app: FastifyInstance) {
   // `error: Error` anotado explicitamente: nesta versão do Fastify o TS infere
   // `unknown` para o parâmetro e nada abaixo compila.

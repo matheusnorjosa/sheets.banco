@@ -23,7 +23,7 @@ Clients can also **set** `X-Request-Id` on the request. The server uses the inbo
 |---|---|---|
 | Retry with exponential backoff | `GOOGLE_RATE_LIMIT`, `GOOGLE_QUOTA_EXCEEDED`, `RATE_LIMIT_EXCEEDED`, transient `INTERNAL_ERROR` | Start at 1s, double up to 60s, cap at 5 attempts. Honor `Retry-After` if present. |
 | Re-authenticate, then retry once | `UNAUTHORIZED`, `API_KEY_EXPIRED`, `SIGNATURE_EXPIRED` | Refresh the token / re-sign the request. Don't loop. |
-| Don't retry — fix and try again | `VALIDATION_ERROR`, `INVALID_API_KEY`, `INSUFFICIENT_SCOPES`, `INVALID_CREDENTIALS`, `EMAIL_EXISTS`, `NOT_FOUND`, `SHEET_ACCESS_ERROR`, `GOOGLE_API_NOT_ENABLED`, `*_DISABLED`, `IP_FORBIDDEN`, `CORS_FORBIDDEN`, `SIGNATURE_MISSING`, `SIGNATURE_INVALID` | The request itself is wrong. Retrying will produce the same response. |
+| Don't retry — fix and try again | `VALIDATION_ERROR`, `INVALID_API_KEY`, `INSUFFICIENT_SCOPES`, `INVALID_CREDENTIALS`, `EMAIL_EXISTS`, `NOT_FOUND`, `ROUTE_NOT_FOUND`, `SHEET_ACCESS_ERROR`, `GOOGLE_API_NOT_ENABLED`, `*_DISABLED`, `IP_FORBIDDEN`, `CORS_FORBIDDEN`, `SIGNATURE_MISSING`, `SIGNATURE_INVALID` | The request itself is wrong. Retrying will produce the same response. |
 
 ## Code catalog
 
@@ -59,6 +59,7 @@ Codes are stable. New codes may appear in future releases; existing codes will n
 |---|---|---|
 | `VALIDATION_ERROR` | 400 | Request body or query failed schema validation. |
 | `NOT_FOUND` | 404 | Resource ID does not exist or is not visible to the caller. |
+| `ROUTE_NOT_FOUND` | 404 | No route is registered for that method + path — the URL itself is wrong, not the resource. Distinct from `NOT_FOUND`, which means the route exists but the record doesn't. |
 | `SHEET_ACCESS_ERROR` | 403 | Generic 403/404 from Google Sheets — usually the sheet wasn't shared with the OAuth user, or the ID is wrong. |
 | `INVALID_SHEET_ID` | 400 | The provided Google Sheets ID has the wrong shape. |
 | `HEADER_ROW_OUTSIDE_RANGE` | 400 | Configured header row falls outside the chosen range. |
