@@ -19,10 +19,10 @@ export default defineConfig({
       // subir estes números quando a cobertura sobe, e nunca baixá-los para o
       // build passar. Serve para impedir regressão, não para premiar.
       thresholds: {
-        statements: 71,
-        branches: 68,
-        functions: 76,
-        lines: 72,
+        statements: 73,
+        branches: 70,
+        functions: 77,
+        lines: 74,
       },
     },
   },
