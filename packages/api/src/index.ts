@@ -3,7 +3,6 @@ import fastifyJwt from '@fastify/jwt';
 import helmet from '@fastify/helmet';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
-import swaggerUi from '@fastify/swagger-ui';
 import rawBody from 'fastify-raw-body';
 import { env } from './config/env.js';
 import { AppError } from './lib/errors.js';
@@ -98,7 +97,18 @@ app.register(swagger, {
     },
   },
 });
-app.register(swaggerUi, { routePrefix: '/docs' });
+// A UI HTML do Swagger (@fastify/swagger-ui) foi removida: ela arrasta
+// @fastify/static <=10.1.1, que tem duas falhas HIGH em aberto (bypass de
+// autorização por caminho não-canônico e path traversal) e NENHUMA correção
+// compatível — o swagger-ui fixa `^9.1.2` e a correção só existe na 10.1.2.
+// Como o /docs era público, era superfície exposta em troca de conveniência.
+//
+// O spec continua sendo gerado pelo @fastify/swagger (que não é afetado) e é
+// servido aqui como JSON puro — sem servir arquivo estático, sem o pacote
+// vulnerável. Quem quer a interface aponta o Swagger Editor/Postman para cá.
+// Os specs POR API (`/api/v1/:apiId/openapi.json` e `/postman.json`) são de
+// código próprio em routes/v1/schema.ts e não dependem disto.
+app.get('/openapi.json', async () => app.swagger());
 
 // Rate limiter (registered globally, applied per-route)
 registerRateLimiter(app);
