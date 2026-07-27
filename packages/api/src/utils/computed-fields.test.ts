@@ -13,16 +13,17 @@
  * aritméticos, parêntese e ponto — qualquer letra derruba a expressão para o
  * caminho de texto. Isso está travado abaixo.
  *
- * A má notícia é o que estes testes documentam: a decisão "isto é matemática?"
- * acontece DEPOIS da substituição, sobre a string já montada. Ou seja, o
- * **valor da célula** participa da decisão. Um CPF vira conta, um código com
- * zero à esquerda perde o zero. Nada disso é ataque — é dado normal da planilha
- * sendo corrompido em silêncio.
+ * O segundo bloco protege a correção que veio junto: a decisão "isto é
+ * matemática?" olha a EXPRESSÃO com os placeholders neutralizados, não o texto
+ * já substituído. Antes ela olhava o resultado, e o **valor da célula**
+ * decidia — um CPF virava conta (`012.345.678-90` saía `-77.66`), um código
+ * perdia o zero à esquerda. Não era ataque: era dado normal da planilha sendo
+ * corrompido em silêncio. Cada teste de lá traz, no comentário, o que saía
+ * antes.
  *
- * Os casos assim estão marcados com ACHADO. Eles travam o comportamento de
- * HOJE; não são endosso dele. Se a decisão de matemática passar a olhar a
- * expressão em vez do resultado substituído, estes testes falham de propósito e
- * devem ser reescritos junto com a correção.
+ * O que continua travado como comportamento atual está marcado com ACHADO —
+ * parêntese desbalanceado aceito, campo que não enxerga outro campo, e campo
+ * que sobrescreve coluna real da planilha.
  */
 import { describe, it, expect } from 'vitest';
 import { evaluateExpression, applyComputedFields } from './computed-fields.js';
@@ -108,59 +109,67 @@ describe('não há execução de código — só as quatro operações', () => {
   });
 });
 
-describe('ACHADO: o valor da célula é avaliado como aritmética', () => {
-  // A raiz de tudo nesta seção: `evaluateExpression` chama `safeMathEval` sobre
-  // a string JÁ SUBSTITUÍDA. A pergunta "isto é matemática?" é feita ao
-  // resultado, não à expressão — então o conteúdo da planilha decide.
+describe('o valor da célula NÃO decide se há cálculo — quem decide é a expressão', () => {
+  // Este bloco existe por causa de um defeito que já foi real: o
+  // `evaluateExpression` chamava o avaliador sobre a string JÁ SUBSTITUÍDA, e
+  // a pergunta "isto é matemática?" era feita ao resultado. O conteúdo da
+  // planilha decidia. Um campo que só repassava uma coluna corrompia o valor
+  // sempre que ele parecesse uma conta.
   //
-  // Consequência: um campo calculado que só REPASSA uma coluna (`{{col}}`,
-  // sem nenhum operador) corrompe o valor sempre que ele parecer uma conta.
+  // Hoje a decisão olha a expressão com os placeholders neutralizados
+  // (`isArithmeticExpression`). Cada teste abaixo tem, no comentário, o que
+  // saía antes.
 
-  it('CPF vira conta: "012.345.678-90" sai como "-77.66"', () => {
-    // O pior caso conhecido. `012.345.678-90` só tem dígitos, ponto e hífen —
-    // todos no allowlist — então o parser lê como aritmética e devolve um
-    // número. Qualquer campo calculado sobre a coluna de CPF destrói o dado.
-    expect(evaluateExpression('{{cpf}}', linha({ cpf: '012.345.678-90' }))).toBe('-77.66');
+  it('CPF passa intacto — antes virava "-77.66"', () => {
+    // O pior caso conhecido: `012.345.678-90` só tem dígito, ponto e hífen,
+    // todos aceitos pelo avaliador, então era lido como aritmética.
+    expect(evaluateExpression('{{cpf}}', linha({ cpf: '012.345.678-90' }))).toBe('012.345.678-90');
   });
 
-  it('zero à esquerda some: código "0601001" sai como "601001"', () => {
-    // Este projeto já foi mordido por zero à esquerda na migração do Protheus:
-    // a coluna de código de produto precisa ser Texto puro na planilha senão o
-    // zero some. Aqui ele some de novo, do outro lado, na resposta da API.
-    expect(evaluateExpression('{{codigo}}', linha({ codigo: '0601001' }))).toBe('601001');
-    expect(evaluateExpression('{{codigo}}', linha({ codigo: '007' }))).toBe('7');
+  it('zero à esquerda sobrevive — antes "0601001" virava "601001"', () => {
+    // A mesma armadilha que mordeu a migração do Protheus, do lado da resposta
+    // da API: código de produto perdendo o zero em silêncio.
+    expect(evaluateExpression('{{codigo}}', linha({ codigo: '0601001' }))).toBe('0601001');
+    expect(evaluateExpression('{{codigo}}', linha({ codigo: '007' }))).toBe('007');
   });
 
-  it('célula contendo uma conta é calculada', () => {
-    // A pessoa digitou o texto "2*3" na planilha; a API responde "6".
-    expect(evaluateExpression('{{a}}', linha({ a: '2*3' }))).toBe('6');
+  it('célula contendo uma conta não é calculada — antes "2*3" virava "6"', () => {
+    // A pessoa digitou o texto "2*3" numa célula; isso é dado, não fórmula.
+    expect(evaluateExpression('{{a}}', linha({ a: '2*3' }))).toBe('2*3');
   });
 
-  it('espaço em volta do número é descartado', () => {
-    // `sanitized = expr.replace(/\s+/g, '')` remove TODO espaço antes de
-    // decidir. "  7  " vira "7" e é tratado como número.
-    expect(evaluateExpression('{{a}}', linha({ a: '  7  ' }))).toBe('7');
+  it('espaço em volta do valor é preservado — antes "  7  " virava "7"', () => {
+    expect(evaluateExpression('{{a}}', linha({ a: '  7  ' }))).toBe('  7  ');
   });
 
-  it('precisão se perde: "1.005" sai como "1.00"', () => {
-    // `toFixed(2)` em valor fracionário. Preço com três casas, coordenada
-    // geográfica, percentual — tudo trunca.
-    expect(evaluateExpression('{{a}}', linha({ a: '1.005' }))).toBe('1.00');
+  it('precisão é preservada — antes "1.005" virava "1.00"', () => {
+    // Preço com três casas, coordenada geográfica, percentual: tudo truncava.
+    expect(evaluateExpression('{{a}}', linha({ a: '1.005' }))).toBe('1.005');
   });
 
-  it('mas notação científica escapa, porque "e" não está no allowlist', () => {
-    // Assimetria que vale conhecer: "1e3" tem letra, então NÃO é avaliado e
-    // passa intacto — enquanto "1000" seria normalizado. O critério não é
-    // "parece número", é "casa o allowlist".
-    expect(evaluateExpression('{{x}}', linha({ x: '1e3' }))).toBe('1e3');
+  it('telefone e valor monetário formatado passam intactos', () => {
+    expect(evaluateExpression('{{tel}}', linha({ tel: '85-99999-1234' }))).toBe('85-99999-1234');
+    expect(evaluateExpression('{{v}}', linha({ v: '1.234' }))).toBe('1.234');
   });
 
-  it('texto puro e valor vazio passam intactos', () => {
-    // O contraponto necessário: se TUDO fosse corrompido, os testes acima não
-    // distinguiriam avaliação de destruição.
+  it('texto, vazio e negativo continuam intactos', () => {
     expect(evaluateExpression('{{a}}', linha({ a: 'Ana' }))).toBe('Ana');
     expect(evaluateExpression('{{a}}', linha({ a: '' }))).toBe('');
     expect(evaluateExpression('{{a}}', linha({ a: '-5' }))).toBe('-5');
+  });
+
+  it('mas com operador na EXPRESSÃO o cálculo acontece normalmente', () => {
+    // O contraponto que impede a correção de virar "nunca calcula nada": a
+    // mesma célula que passa intacta em `{{a}}` é somada em `{{a}} + {{b}}`.
+    expect(evaluateExpression('{{a}}', linha({ a: '10' }))).toBe('10');
+    expect(evaluateExpression('{{a}} + {{b}}', linha({ a: '10', b: '5' }))).toBe('15');
+  });
+
+  it('operador dentro de texto não dispara cálculo', () => {
+    // `Total: {{a}} - {{b}}` tem hífen, mas também tem letras, então o que
+    // sobra depois de neutralizar os placeholders não é aritmética pura.
+    expect(evaluateExpression('Total: {{a}} - {{b}}', linha({ a: '10', b: '5' })))
+      .toBe('Total: 10 - 5');
   });
 });
 
