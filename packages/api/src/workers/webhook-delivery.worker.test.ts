@@ -115,6 +115,7 @@ const TS_ESPERADO = Math.floor(RELOGIO.getTime() / 1000);
 
 interface DadosJob {
   subscriptionId: string;
+  deliveryId: string;
   url: string;
   secret: string;
   event: string;
@@ -138,6 +139,9 @@ function jobFalso(over: OverJob = {}): JobFalso {
     ...over,
     data: {
       subscriptionId: 'sub-1',
+      // Cuid, como o Prisma gera — deliberadamente diferente do `id` do job
+      // acima, que é o contador do BullMQ. Confundir os dois era o defeito.
+      deliveryId: 'clx0entrega0padrao',
       url: 'https://destino.example.com/hook',
       secret: 'segredo-legado-em-claro',
       event: 'row.created',
@@ -389,7 +393,7 @@ describe('requisição HTTP (método, headers e corpo)', () => {
     expect(demais).toEqual({
       'Content-Type': 'application/json',
       'X-Webhook-Event': 'row.created',
-      'X-Webhook-Delivery-Id': 'entrega-42',
+      'X-Webhook-Delivery-Id': 'clx0entrega0padrao',
       'X-Webhook-Timestamp': String(TS_ESPERADO),
     });
   });
@@ -401,9 +405,14 @@ describe('requisição HTTP (método, headers e corpo)', () => {
     expect(initDoFetch().headers['X-Webhook-Event']).toBe('rows.cleared');
   });
 
-  it('X-Webhook-Delivery-Id vira string vazia quando job.id é undefined', async () => {
-    await processador()(jobFalso({ id: undefined }));
-    expect(initDoFetch().headers['X-Webhook-Delivery-Id']).toBe('');
+  it('X-Webhook-Delivery-Id manda o id da ENTREGA, não o do job do BullMQ', async () => {
+    // Antes mandava `job.id ?? ''` — um contador sequencial da fila, reciclável
+    // entre limpezas. Consumidor que usasse esse header para idempotência
+    // podia deduplicar entregas distintas.
+    await processador()(
+      jobFalso({ id: '77', data: { deliveryId: 'clx0entrega0abc' } }),
+    );
+    expect(initDoFetch().headers['X-Webhook-Delivery-Id']).toBe('clx0entrega0abc');
   });
 
   it('corpo é JSON.stringify(payload)', async () => {
@@ -422,18 +431,35 @@ describe('sucesso (response.ok)', () => {
     expect(argsUpdate().data).toEqual({ status: 'success', attempts: 3, responseCode: 201 });
   });
 
-  it('filtra por subscriptionId + job.id', async () => {
-    await processador()(jobFalso({ id: 'entrega-9' }));
-    expect(argsUpdate().where).toEqual({ subscriptionId: 'sub-1', id: 'entrega-9' });
+  it('atualiza a linha certa: filtra pelo deliveryId do payload', async () => {
+    // Este é o teste que fecha o defeito. Antes o filtro era
+    // `{ subscriptionId, id: job.id }` — e `job.id` é o contador do BullMQ
+    // ('1', '2', '3'…), enquanto o `WebhookDelivery.id` é um cuid do Prisma.
+    // Os dois nunca casavam, o updateMany atingia ZERO linhas, e toda entrega
+    // ficava 'pending' para sempre no histórico do dashboard — inclusive as
+    // entregues com 200.
+    await processador()(
+      jobFalso({ id: '3', data: { deliveryId: 'clx0entrega0abc' } }),
+    );
+
+    expect(argsUpdate().where).toEqual({
+      id: 'clx0entrega0abc',
+      subscriptionId: 'sub-1',
+    });
   });
 
-  it('sem job.id o filtro fica só com subscriptionId (id undefined)', async () => {
-    await processador()(jobFalso({ id: undefined }));
-    const where = argsUpdate().where;
-    expect(where.subscriptionId).toBe('sub-1');
-    // `id: undefined` some do WHERE do Prisma: o updateMany passa a atingir
-    // TODAS as entregas da assinatura. Comportamento travado aqui de propósito.
-    expect(where.id).toBeUndefined();
+  it('o filtro NÃO usa o job.id do BullMQ', async () => {
+    // Guarda-corpo contra a regressão exata: se alguém trocar `deliveryId` por
+    // `job.id` de novo, o `where.id` passa a ser '3' e este teste quebra.
+    await processador()(
+      jobFalso({ id: '3', data: { deliveryId: 'clx0entrega0abc' } }),
+    );
+    expect(argsUpdate().where.id).not.toBe('3');
+  });
+
+  it('o subscriptionId continua no filtro — defesa contra id de outra assinatura', async () => {
+    await processador()(jobFalso({ data: { deliveryId: 'entrega-x' } }));
+    expect(argsUpdate().where.subscriptionId).toBe('sub-1');
   });
 });
 
@@ -496,13 +522,17 @@ describe('erro de rede (fetch rejeita)', () => {
     expect(argsUpdate().data).toEqual({ status: 'failed', attempts: 5 });
   });
 
-  it('sem job.id o update do catch também perde o filtro por id', async () => {
+  it('o update do catch usa o mesmo filtro por deliveryId', async () => {
     fetchMock.mockRejectedValue(new Error('timeout'));
 
-    await expect(processador()(jobFalso({ id: undefined }))).rejects.toThrow('timeout');
-    const where = argsUpdate().where;
-    expect(where.subscriptionId).toBe('sub-1');
-    expect(where.id).toBeUndefined();
+    await expect(
+      processador()(jobFalso({ id: '9', data: { deliveryId: 'entrega-do-catch' } })),
+    ).rejects.toThrow('timeout');
+
+    expect(argsUpdate().where).toEqual({
+      id: 'entrega-do-catch',
+      subscriptionId: 'sub-1',
+    });
   });
 
   it('falha do updateMany no catch NÃO mascara o erro original do fetch', async () => {

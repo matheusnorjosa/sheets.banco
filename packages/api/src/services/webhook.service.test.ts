@@ -69,6 +69,7 @@ interface DadosEntrega {
 
 interface JobDaFila {
   subscriptionId: string;
+  deliveryId: string;
   url: string;
   secret: string;
   event: string;
@@ -190,23 +191,48 @@ describe('entrega + enfileiramento', () => {
         payload: PAYLOAD,
         status: 'pending',
       },
+      // O `select: { id: true }` não é detalhe: é o id que vai no job para o
+      // worker atualizar esta linha depois. Sem ele, o `create` descartaria o
+      // retorno e a entrega ficaria 'pending' para sempre.
+      select: { id: true },
     });
   });
 
-  it('enfileira o job com subscriptionId, url, secret, evento e payload', async () => {
+  it('enfileira o job com deliveryId, subscriptionId, url, secret, evento e payload', async () => {
     findManyMock.mockResolvedValue([
       assinatura({ id: 'sub-A', url: 'https://destino.test/x', secret: 's3cr3t' }),
     ]);
+    criarEntregaMock.mockResolvedValue({ id: 'clx0entrega0criada' });
 
     await dispatchWebhooks(API_ID, 'row.updated', PAYLOAD);
 
     expect(argDaChamada<JobDaFila>(enfileirarMock)).toEqual({
       subscriptionId: 'sub-A',
+      // Sem este campo o worker não sabe qual linha atualizar e a entrega fica
+      // 'pending' para sempre. É o elo que faltava.
+      deliveryId: 'clx0entrega0criada',
       url: 'https://destino.test/x',
       secret: 's3cr3t',
       event: 'row.updated',
       payload: PAYLOAD,
     });
+  });
+
+  it('o deliveryId enfileirado é o id devolvido pelo create daquela entrega', async () => {
+    // Com duas assinaturas, cada job tem que levar o id da SUA entrega — não o
+    // da primeira, nem um id repetido.
+    findManyMock.mockResolvedValue([
+      assinatura({ id: 'sub-A' }),
+      assinatura({ id: 'sub-B' }),
+    ]);
+    criarEntregaMock
+      .mockResolvedValueOnce({ id: 'entrega-de-A' })
+      .mockResolvedValueOnce({ id: 'entrega-de-B' });
+
+    await dispatchWebhooks(API_ID, 'row.created', PAYLOAD);
+
+    expect(argDaChamada<JobDaFila>(enfileirarMock, 0).deliveryId).toBe('entrega-de-A');
+    expect(argDaChamada<JobDaFila>(enfileirarMock, 1).deliveryId).toBe('entrega-de-B');
   });
 
   it('com duas assinaturas: duas entregas e dois jobs, um por assinatura', async () => {

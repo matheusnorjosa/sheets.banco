@@ -188,6 +188,7 @@ describe('getters antes do init', () => {
     await expect(
       filaDeWebhook.enqueueWebhookDelivery({
         subscriptionId: 'sub-1',
+        deliveryId: 'entrega-1',
         url: 'https://exemplo.test/hook',
         secret: 's3gr3d0',
         event: 'row.created',
@@ -398,6 +399,7 @@ describe('enqueueWrite', () => {
 describe('enqueueWebhookDelivery', () => {
   const ENTREGA: WebhookDeliveryJobData = {
     subscriptionId: 'sub-1',
+    deliveryId: 'entrega-1',
     url: 'https://exemplo.test/hook',
     secret: 's3gr3d0-do-webhook',
     event: 'row.created',
