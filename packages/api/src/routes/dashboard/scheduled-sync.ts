@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { parseExpression } from 'cron-parser';
+// Import DEFAULT, não nomeado. O `cron-parser@4` é CommonJS e termina com
+// `module.exports = CronParser`, um objeto montado em runtime — o
+// `cjs-module-lexer` do Node não consegue enumerar as propriedades, então
+// `import { parseExpression } from 'cron-parser'` compila e passa no vitest
+// (que usa o interop do Vite) e explode no boot em produção com
+// "Named export 'parseExpression' not found". Já quebrou um deploy uma vez.
+import cronParser from 'cron-parser';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
@@ -29,7 +35,7 @@ function cronValido(expressao: string): boolean {
   if (expressao.trim().split(/\s+/).length !== 5) return false;
 
   try {
-    parseExpression(expressao);
+    cronParser.parseExpression(expressao);
     return true;
   } catch {
     return false;
