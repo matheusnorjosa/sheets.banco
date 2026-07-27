@@ -2,7 +2,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // Sem isto, `npm run typecheck -w packages/cli` falhava com 33 erros —
+    // `process`, `console` e `node:fs` "não existem" — porque a resolução
+    // automática de `@types/*` não alcançava o pacote içado na raiz do
+    // monorepo. Estava quebrado antes destes testes; como o script existe e
+    // ninguém o roda no CI, ninguém tinha percebido. Declarar o tipo
+    // explicitamente é mais robusto que depender do içamento do npm.
+    "types": ["node"]
   },
   "include": ["src/**/*"]
 }
