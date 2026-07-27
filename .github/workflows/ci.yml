@@ -63,6 +63,17 @@ jobs:
       - name: Testes + cobertura
         run: npm run test:coverage -w packages/api
 
+      # Teste verde NÃO prova que o código sobe. O vitest roda sobre o Vite,
+      # que faz seu próprio interop de CommonJS e aceita
+      # `import { x } from 'pacote-cjs'`; o Node em ESM nativo não aceita, e o
+      # processo morre no boot com "Named export não encontrado". Foi assim que
+      # o `cron-parser` derrubou dois deploys com o CI inteiro verde.
+      #
+      # Este passo importa cada módulo compilado com o Node de verdade — sem
+      # subir servidor nem tocar em banco.
+      - name: Módulos importam no Node ESM
+        run: npm run verify:imports -w packages/api
+
   web:
     name: Web — Build
     runs-on: ubuntu-latest
