@@ -37,3 +37,6 @@ packages/web/src/app/favicon.ico
 # telefone) e credenciais de produção. Mantido localmente para preservação
 # após cleanup do C:\tmp\ — nunca commitar.
 /_local_data/
+
+# Relatórios de cobertura (gerados por `vitest run --coverage`)
+coverage/
