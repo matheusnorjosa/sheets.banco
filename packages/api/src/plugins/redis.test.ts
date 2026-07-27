@@ -257,17 +257,25 @@ describe('retryStrategy', () => {
     expect(opcoesDoConstrutor().retryStrategy(10)).toBe(2000);
   });
 
-  it('times=11 devolve null — desiste de reconectar', () => {
-    expect(opcoesDoConstrutor().retryStrategy(11)).toBeNull();
+  it('NUNCA devolve null — desistir de reconectar deixaria o cache morto até reiniciar', () => {
+    // Este é o teste que fecha o defeito. Antes havia
+    // `if (times > 10) return null`, e `null` no ioredis significa parar de
+    // reconectar PARA SEMPRE. Como o backoff somava 200+400+…+2000 = 11s,
+    // qualquer queda do Upstash maior que isso desligava o cache até alguém
+    // reiniciar o processo — em silêncio, porque o `cache.service` engole erro
+    // de propósito e o cliente usa `enableOfflineQueue: false`.
+    const estrategia = opcoesDoConstrutor().retryStrategy;
+    for (const tentativa of [1, 10, 11, 25, 100, 10_000]) {
+      expect(estrategia(tentativa)).not.toBeNull();
+      expect(typeof estrategia(tentativa)).toBe('number');
+    }
   });
 
-  it('times=30 também devolve null: o teto de 5000ms é inalcançável', () => {
-    // Comportamento REAL, não o esperado pela leitura ingênua do `Math.min`:
-    // o teto de 5000 só valeria a partir de times=25, mas `times > 10` já
-    // devolveu null. O `Math.min(..., 5000)` é código morto — travado aqui
-    // para que uma mudança futura no limite de 10 apareça como falha.
-    expect(opcoesDoConstrutor().retryStrategy(30)).toBeNull();
-    expect(opcoesDoConstrutor().retryStrategy(25)).toBeNull();
+  it('o backoff cresce e para no teto de 30s', () => {
+    const estrategia = opcoesDoConstrutor().retryStrategy;
+    expect(estrategia(11)).toBe(2200);
+    expect(estrategia(150)).toBe(30_000); // 150 * 200 = 30000, exatamente no teto
+    expect(estrategia(10_000)).toBe(30_000); // e não passa dele
   });
 
   it('times=0 devolve 0 (sem piso mínimo de espera)', () => {

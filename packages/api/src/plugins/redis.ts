@@ -26,9 +26,26 @@ export default fp(async (app: FastifyInstance) => {
     enableOfflineQueue: false,
     lazyConnect: false,
     connectTimeout: 5000,
+    /**
+     * Backoff de reconexão, sem desistência permanente.
+     *
+     * Antes era `if (times > 10) return null`, e `null` no ioredis significa
+     * **parar de reconectar para sempre**. Como o backoff somava
+     * 200+400+…+2000 = 11 segundos, qualquer queda do Upstash maior que isso
+     * desligava o cache até alguém reiniciar o processo — e como o cliente é
+     * criado com `enableOfflineQueue: false`, tudo passava a falhar em
+     * silêncio, sem log (o `cache.service` engole erro de propósito).
+     *
+     * O teto de 5000ms também era código morto: só seria atingido em
+     * `times >= 25`, e o `return null` saía em 11. O código LIA como "backoff
+     * de até 5s" enquanto o máximo real era 2s.
+     *
+     * Agora o backoff cresce até 30s e continua tentando. Um blip de rede se
+     * recupera sozinho; uma queda longa custa uma tentativa a cada 30s, que é
+     * barato.
+     */
     retryStrategy(times: number) {
-      if (times > 10) return null; // stop retrying after 10 attempts
-      return Math.min(times * 200, 5000);
+      return Math.min(times * 200, 30_000);
     },
   });
 

@@ -51,9 +51,20 @@ async function importarComEnv(env: { LOG_LEVEL?: string; NODE_ENV?: string } = {
   return { modulo, opcoes };
 }
 
-/** Erro no formato que o Prisma entrega: `Error` com `code`. */
+/** `PrismaClientKnownRequestError` — erro de query, carrega `code`. */
 function erroPrisma(code: string, mensagem = `falha ${code}`) {
   return Object.assign(new Error(mensagem), { code });
+}
+
+/**
+ * `PrismaClientInitializationError` — erro de CONEXÃO, e é ele que carrega
+ * P1001/P1002/P1017. Repare que o campo é `errorCode`, não `code`
+ * (`@prisma/client/runtime/library.d.ts`: `errorCode?: string; retryable?: boolean`).
+ * É a forma que o retry precisa reconhecer para servir ao caso de uso que
+ * motivou escrevê-lo — blip do pooler do Supabase.
+ */
+function erroDeConexao(errorCode: string, mensagem = `falha ${errorCode}`) {
+  return Object.assign(new Error(mensagem), { errorCode, clientVersion: '6.0.0' });
 }
 
 beforeEach(() => {
@@ -142,6 +153,34 @@ describe('withTransientRetry — o que é transiente', () => {
       expect(fn).toHaveBeenCalledTimes(2);
     });
   }
+
+  for (const codigo of ['P1001', 'P1002', 'P1017']) {
+    it(`repete quando o erro traz ${codigo} em errorCode (PrismaClientInitializationError)`, async () => {
+      // Este é o teste que fecha o defeito. O retry lia apenas `err.code`,
+      // mas quem carrega P1001/P1002/P1017 é o
+      // `PrismaClientInitializationError`, que expõe `errorCode`. Só o
+      // `PrismaClientKnownRequestError` (P2xxx, erros de query) tem `code`.
+      // Ou seja: o retry existia, era exportado, e nunca disparava para o
+      // caso de uso que motivou escrevê-lo.
+      const { modulo } = await importarComEnv();
+      const fn = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(erroDeConexao(codigo))
+        .mockResolvedValueOnce('recuperado');
+
+      await expect(modulo.withTransientRetry(fn, { baseMs: 1 })).resolves.toBe('recuperado');
+      expect(fn).toHaveBeenCalledTimes(2);
+    });
+  }
+
+  it('errorCode NÃO transiente (P2002) continua lançando na hora', async () => {
+    // O contraponto: aceitar `errorCode` não pode virar "repete tudo".
+    const { modulo } = await importarComEnv();
+    const fn = vi.fn<() => Promise<never>>().mockRejectedValue(erroDeConexao('P2002'));
+
+    await expect(modulo.withTransientRetry(fn, { baseMs: 1 })).rejects.toThrow('falha P2002');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
 
   it('trata como transiente qualquer objeto com code transiente, mesmo sem ser Error', async () => {
     const { modulo } = await importarComEnv();

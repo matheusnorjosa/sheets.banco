@@ -463,25 +463,59 @@ describe('headers fixos', () => {
   });
 });
 
-describe('quirk da vírgula sobrando na lista', () => {
-  it('"https://a.com," passa a aceitar requisição SEM Origin e emite header vazio', async () => {
-    // `'https://a.com,'.split(',')` → `['https://a.com', '']`. Como o origin
-    // ausente vira `''`, ele passa a estar "na lista": o middleware devolve
-    // `Access-Control-Allow-Origin: ` (vazio) e `Vary: Origin`. Um espaço a
-    // mais digitado no dashboard muda o comportamento do preflight.
+describe('vírgula sobrando na lista não abre buraco', () => {
+  // Antes, `'https://a.com,'.split(',')` virava `['https://a.com', '']`, e
+  // como origem ausente chega aqui como `''` (por causa do `?? ''`), a
+  // requisição sem header `Origin` passava a "estar na lista". O middleware
+  // devolvia `Access-Control-Allow-Origin:` com valor vazio e o preflight sem
+  // Origin dava 204 em vez de 403. Um caractere a mais digitado no dashboard
+  // mudava o comportamento.
+  //
+  // O `filter(Boolean)` tira a entrada vazia e o `origin &&` garante que
+  // origem ausente nunca case, mesmo que um vazio entre na lista por outro
+  // caminho.
+
+  it('requisição SEM Origin não recebe header de origem permitida', async () => {
     sheetApiDaRequisicao = criarSheetApi({ corsOrigins: 'https://a.com,' });
 
     const r = await app.inject({ method: 'GET', url: URL_ROTA });
 
-    expect(r.headers['access-control-allow-origin']).toBe('');
-    expect(r.headers['vary']).toBe('Origin');
+    expect(r.headers['access-control-allow-origin']).toBeUndefined();
+    expect(r.headers['vary']).toBeUndefined();
   });
 
-  it('e o OPTIONS sem Origin deixa de dar 403 por causa da vírgula', async () => {
+  it('OPTIONS sem Origin continua dando 403 mesmo com a vírgula sobrando', async () => {
     sheetApiDaRequisicao = criarSheetApi({ corsOrigins: 'https://a.com,' });
 
     const r = await app.inject({ method: 'OPTIONS', url: URL_ROTA });
 
-    expect(r.statusCode).toBe(204);
+    expect(r.statusCode).toBe(403);
+    expect(r.json().code).toBe('CORS_FORBIDDEN');
+  });
+
+  it('a origem que ESTÁ na lista continua sendo aceita', async () => {
+    // O contraponto: a correção não podia quebrar a lista de verdade.
+    sheetApiDaRequisicao = criarSheetApi({ corsOrigins: 'https://a.com,' });
+
+    const r = await app.inject({
+      method: 'GET',
+      url: URL_ROTA,
+      headers: { origin: 'https://a.com' },
+    });
+
+    expect(r.headers['access-control-allow-origin']).toBe('https://a.com');
+    expect(r.headers['vary']).toBe('Origin');
+  });
+
+  it('lista com vários vazios (",,https://b.com,,") ainda funciona', async () => {
+    sheetApiDaRequisicao = criarSheetApi({ corsOrigins: ',,https://b.com,,' });
+
+    const permitida = await app.inject({
+      method: 'GET', url: URL_ROTA, headers: { origin: 'https://b.com' },
+    });
+    const semOrigin = await app.inject({ method: 'GET', url: URL_ROTA });
+
+    expect(permitida.headers['access-control-allow-origin']).toBe('https://b.com');
+    expect(semOrigin.headers['access-control-allow-origin']).toBeUndefined();
   });
 });

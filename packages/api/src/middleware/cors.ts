@@ -16,8 +16,18 @@ export async function apiCors(request: FastifyRequest, reply: FastifyReply) {
     // No restrictions — allow all
     reply.header('Access-Control-Allow-Origin', '*');
   } else {
-    const allowed = sheetApi.corsOrigins.split(',').map((o) => o.trim());
-    if (allowed.includes(origin)) {
+    // `filter(Boolean)` não é higiene: sem ele, uma vírgula sobrando
+    // (`"https://a.com,"`) coloca uma string vazia na lista. Como requisição
+    // sem header `Origin` chega aqui com `origin === ''` (o `?? ''` acima),
+    // ela passaria a "estar na lista" — o middleware responderia
+    // `Access-Control-Allow-Origin:` com valor vazio e o preflight sem Origin
+    // devolveria 204 em vez de 403. Um caractere a mais no dashboard mudava o
+    // comportamento.
+    //
+    // O `origin &&` fecha o outro lado: origem ausente nunca casa, mesmo que
+    // alguém consiga colocar vazio na lista por outro caminho.
+    const allowed = sheetApi.corsOrigins.split(',').map((o) => o.trim()).filter(Boolean);
+    if (origin && allowed.includes(origin)) {
       reply.header('Access-Control-Allow-Origin', origin);
       reply.header('Vary', 'Origin');
     } else {

@@ -25,6 +25,28 @@ export const prisma = new PrismaClient({
  */
 const TRANSIENT_CODES = new Set(['P1001', 'P1002', 'P1017']);
 
+/**
+ * Extrai o código de erro do Prisma, olhando os DOIS campos onde ele aparece.
+ *
+ * Esta função existe por causa de um defeito silencioso: o retry lia apenas
+ * `err.code`, mas quem carrega P1001/P1002/P1017 é o
+ * `PrismaClientInitializationError`, e essa classe expõe **`errorCode`** — só
+ * o `PrismaClientKnownRequestError` (P2xxx, erros de query) tem `code`.
+ * Confirmado em `@prisma/client/runtime/library.d.ts`:
+ *
+ *     export declare class PrismaClientInitializationError extends Error {
+ *         clientVersion: string;
+ *         errorCode?: string;
+ *         retryable?: boolean;
+ *
+ * Ou seja: o retry existia, era exportado, e nunca disparava para o caso de
+ * uso que motivou escrevê-lo — blip de conexão do pooler do Supabase.
+ */
+function codigoDoErro(err: unknown): string | undefined {
+  const e = err as { code?: string; errorCode?: string } | null;
+  return e?.code ?? e?.errorCode;
+}
+
 export async function withTransientRetry<T>(
   fn: () => Promise<T>,
   { attempts = 3, baseMs = 50 }: { attempts?: number; baseMs?: number } = {},
@@ -35,7 +57,7 @@ export async function withTransientRetry<T>(
       return await fn();
     } catch (err: unknown) {
       lastErr = err;
-      const code = (err as { code?: string })?.code;
+      const code = codigoDoErro(err);
       if (!code || !TRANSIENT_CODES.has(code)) throw err;
       if (i === attempts - 1) break;
       await new Promise((resolve) => setTimeout(resolve, baseMs * Math.pow(2, i)));
