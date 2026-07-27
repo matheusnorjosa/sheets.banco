@@ -79,6 +79,35 @@ function parseFactor(expr: string, state: ParseState): number {
 }
 
 /**
+ * A EXPRESSÃO pede aritmética?
+ *
+ * A pergunta é feita à expressão que a pessoa escreveu, com os placeholders
+ * neutralizados — nunca ao texto já substituído. Essa distinção é o ponto todo
+ * desta função.
+ *
+ * Antes, o `evaluateExpression` chamava o avaliador sobre a string já montada,
+ * então o VALOR da célula decidia. Um campo que só repassava uma coluna
+ * (`{{cpf}}`, sem operador nenhum) virava conta sempre que o conteúdo parecesse
+ * uma: `012.345.678-90` saía como `-77.66`, e o código de produto `0601001`
+ * perdia o zero e saía `601001` — a mesma armadilha de zero à esquerda que já
+ * mordeu a migração do Protheus, agora do lado da resposta da API.
+ *
+ * Trocando os `{{...}}` por `0`, `{{preco}} * {{qtd}}` vira `0 * 0` (tem
+ * operador, e o resto é só aritmética → é conta) enquanto `{{cpf}}` vira `0`
+ * (sem operador → é texto, seja lá o que a célula contenha).
+ */
+function isArithmeticExpression(expression: string): boolean {
+  const withoutPlaceholders = expression.replace(TEMPLATE_RE, '0');
+
+  // Precisa de ao menos um operador — senão é repasse de valor, não cálculo.
+  if (!/[+\-*/]/.test(withoutPlaceholders)) return false;
+
+  // E o que sobra tem que ser só aritmética. Qualquer letra ou símbolo
+  // (`Total: {{a}}`, `{{a-b}}`) indica texto com placeholder dentro.
+  return /^[\d+\-*/().\s]+$/.test(withoutPlaceholders);
+}
+
+/**
  * Evaluate a single computed field expression for a row.
  */
 export function evaluateExpression(expression: string, row: SheetRow): string {
@@ -87,13 +116,18 @@ export function evaluateExpression(expression: string, row: SheetRow): string {
     return row[col] ?? '';
   });
 
-  // Check if the result is a pure math expression
+  // Sem operador na expressão, o valor sai como está na planilha — inclusive
+  // zero à esquerda, CPF pontuado e o que mais a célula tiver.
+  if (!isArithmeticExpression(expression)) return substituted;
+
   const mathResult = safeMathEval(substituted);
   if (mathResult !== null && isFinite(mathResult)) {
     // Format: remove trailing zeros for clean output
     return mathResult % 1 === 0 ? String(mathResult) : mathResult.toFixed(2);
   }
 
+  // Conta que não fecha (célula com texto, divisão por zero) devolve o texto
+  // substituído, para o consumidor ver o que entrou.
   return substituted;
 }
 
