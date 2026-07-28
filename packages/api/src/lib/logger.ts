@@ -38,8 +38,108 @@ export const redactPaths = [
   '*.googleAccessToken', '*.googleRefreshToken', '*.cpf',
 ];
 
+/**
+ * Parâmetros de query cujo VALOR nunca pode ir para o log.
+ *
+ * `redactPaths` não alcança isto: ele redige campos de OBJETO, e a query vive
+ * dentro de uma string (`req.url`). O serializador padrão do Fastify registra
+ * `url` inteira, com query, em toda requisição — e em `LOG_LEVEL=info`, que é o
+ * padrão de produção.
+ *
+ * O caso concreto: `GET /auth/google?token=<JWT>`. O dashboard manda o próprio
+ * token de sessão na query porque é navegação de topo do navegador, onde não há
+ * como pôr header. Isso gravava um JWT de 24h legível no log da API.
+ *
+ * `code` está na lista por causa do `/auth/google/callback?code=` — é o código
+ * de autorização do Google, trocável por access/refresh token.
+ */
+const PARAMS_SENSIVEIS = new Set([
+  'token',
+  'temptoken',
+  'access_token',
+  'refresh_token',
+  'id_token',
+  'code',
+  'key',
+  'api_key',
+  'apikey',
+  'password',
+  'secret',
+  'signature',
+]);
+
+/**
+ * Troca o valor dos parâmetros sensíveis por `[REDACTED]`, preservando o resto
+ * da URL.
+ *
+ * Redigir só o que é segredo, em vez de cortar a query inteira, mantém o log
+ * útil: `?sheet=GESTÃO ESCOLAR`, `?days=7` e `?layout=raw` são exatamente o que
+ * se olha para entender um problema relatado.
+ */
+export function sanitizarUrl(url: string): string {
+  const corte = url.indexOf('?');
+  if (corte === -1) return url;
+
+  const caminho = url.slice(0, corte);
+  const params = new URLSearchParams(url.slice(corte + 1));
+
+  let redigiu = false;
+  for (const chave of [...params.keys()]) {
+    if (PARAMS_SENSIVEIS.has(chave.toLowerCase())) {
+      params.set(chave, '[REDACTED]');
+      redigiu = true;
+    }
+  }
+
+  // Sem nada a redigir, devolve a original: `params.toString()` re-codifica
+  // (espaço vira `+`, acento vira percent-encoding) e não vale mudar como a URL
+  // aparece no log de toda requisição por causa de um caso raro.
+  if (!redigiu) return url;
+
+  return `${caminho}?${params.toString()}`;
+}
+
+/** O que o serializador precisa da requisição — evita acoplar este módulo ao Fastify. */
+interface RequisicaoLogavel {
+  method?: string;
+  url?: string;
+  headers?: Record<string, unknown>;
+  host?: string;
+  ip?: string;
+  socket?: { remotePort?: number };
+}
+
+/**
+ * Serializadores de log da casa.
+ *
+ * `req` reproduz o padrão do Fastify (`lib/logger-pino.js`) campo a campo, com
+ * a URL passando por `sanitizarUrl`. A cópia é deliberada: substituir o
+ * serializador é tudo-ou-nada, e omitir um campo aqui apagaria em silêncio
+ * `method`, `host` ou `remoteAddress` de toda linha de log — quebrando consulta
+ * de log existente sem quebrar nenhum teste. Ao subir o Fastify, conferir se
+ * ele passou a registrar algo novo.
+ */
+export const serializadoresDeLog = {
+  req(req: RequisicaoLogavel) {
+    // O Fastify devolve `req.headers['accept-version']` cru neste campo, mas o
+    // tipo do serializador promete `string | undefined`. Um header duplicado
+    // chega como array e furaria a promessa — daí a checagem em vez de um cast.
+    const versao = req.headers?.['accept-version'];
+
+    return {
+      method: req.method,
+      url: req.url ? sanitizarUrl(req.url) : req.url,
+      version: typeof versao === 'string' ? versao : undefined,
+      host: req.host,
+      remoteAddress: req.ip,
+      remotePort: req.socket?.remotePort,
+    };
+  },
+};
+
 export const logger = pino({
   level: env.LOG_LEVEL,
   base: { service: 'sheets-banco-api' },
   redact: { paths: redactPaths, censor: '[REDACTED]' },
+  serializers: serializadoresDeLog,
 });
