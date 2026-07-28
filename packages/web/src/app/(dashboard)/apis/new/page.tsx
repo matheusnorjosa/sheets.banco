@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+import { conectarGoogle } from "@/lib/google-connect";
 
 export default function NewApiPage() {
   const { user } = useAuth();
@@ -15,9 +14,13 @@ export default function NewApiPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleAuthorizeGoogle = () => {
-    const token = localStorage.getItem("token");
-    window.location.href = `${API_URL}/auth/google?token=${token}`;
+  const handleAuthorizeGoogle = async () => {
+    setError("");
+    try {
+      await conectarGoogle();
+    } catch {
+      setError("Falha ao iniciar a conexão com o Google. Tente novamente.");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -136,6 +136,27 @@ class ApiClient {
     return this.fetch<{ user: any }>("/auth/me");
   }
 
+  /**
+   * URL da tela de consentimento do Google para "conectar minha conta".
+   *
+   * O token de sessão vai no header, como em qualquer outra chamada. Antes o
+   * dashboard navegava direto para `/auth/google?token=<JWT>`, o que punha a
+   * sessão no histórico do navegador e no log de acesso de todo intermediário.
+   */
+  async googleAuthUrl() {
+    return this.fetch<{ url: string }>("/auth/google/url", { method: "POST" });
+  }
+
+  /**
+   * Troca o código de 60s que veio em `/callback?code=` por uma sessão.
+   */
+  async exchangeGoogleCode(code: string) {
+    return this.fetch<{ user: any; token: string }>("/auth/google/exchange", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
   // Dashboard APIs
   async listApis() {
     return this.fetch<{ apis: any[] }>("/dashboard/apis");

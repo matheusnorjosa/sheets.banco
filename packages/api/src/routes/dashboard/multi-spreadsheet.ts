@@ -21,7 +21,7 @@ function extractSpreadsheetId(urlOrId: string): string {
 }
 
 export async function multiSpreadsheetRoutes(app: FastifyInstance) {
-  app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   app.addHook('onRequest', jwtAuth);
 
   // GET /dashboard/apis/:id/spreadsheets — list additional spreadsheets

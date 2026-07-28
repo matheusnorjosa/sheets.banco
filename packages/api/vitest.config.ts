@@ -20,9 +20,9 @@ export default defineConfig({
       // build passar. Serve para impedir regressão, não para premiar.
       thresholds: {
         statements: 76,
-        branches: 71,
+        branches: 72,
         functions: 81,
-        lines: 77,
+        lines: 78,
       },
     },
   },

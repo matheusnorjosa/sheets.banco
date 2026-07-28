@@ -64,7 +64,7 @@ function extractSpreadsheetId(urlOrId: string): string {
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
   // 60 req/min per user (falls back to IP) — protects against runaway clients.
-  app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
 
   // All dashboard routes require JWT
   app.addHook('onRequest', jwtAuth);

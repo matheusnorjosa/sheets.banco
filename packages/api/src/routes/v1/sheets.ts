@@ -108,7 +108,7 @@ async function resolveSpreadsheetId(sheetApi: SheetApiRecord & { id?: string }, 
 
 export async function sheetsRoutes(app: FastifyInstance) {
   // Apply per-API rate limiting
-  app.register(import('@fastify/rate-limit'), apiRateLimitOptions() as any);
+  await app.register(import('@fastify/rate-limit'), apiRateLimitOptions() as any);
 
   // Resolve SheetApi from :apiId param (supports both ID and slug). Goes
   // through a Redis-backed cache so the hot path on every request doesn't

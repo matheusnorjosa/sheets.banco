@@ -13,7 +13,7 @@
     "build:web": "npm run build -w packages/web",
     "build:sdk": "npm run build -w packages/sdk",
     "lint": "npm run lint -w packages/api",
-    "typecheck": "npm run typecheck -w packages/api",
+    "typecheck": "npm run typecheck -w packages/api && npm run typecheck -w packages/web",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",

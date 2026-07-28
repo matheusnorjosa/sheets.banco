@@ -6,8 +6,7 @@ import Link from "next/link";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useOnboarding } from "@/lib/onboarding";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+import { conectarGoogle } from "@/lib/google-connect";
 
 interface SheetApi {
   id: string;
@@ -23,19 +22,18 @@ export default function ApisPage() {
   const [apis, setApis] = useState<SheetApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [erroGoogle, setErroGoogle] = useState(false);
   const googleStatus = searchParams.get("google");
 
   useOnboarding();
 
   useEffect(() => {
-    // Handle Google login: save JWT token from URL
-    const tokenFromUrl = searchParams.get("token");
-    if (tokenFromUrl) {
-      api.setToken(tokenFromUrl);
-      refreshUser();
-      // Clean URL
-      window.history.replaceState({}, "", "/apis?google=connected");
-    }
+    // Aqui havia um `searchParams.get("token")` que chamava `api.setToken()`
+    // com o valor da URL. Era código morto — a API manda `/apis?google=connected`
+    // sem token nenhum neste fluxo — e ao mesmo tempo um caminho de fixação de
+    // sessão: bastava alguém abrir `/apis?token=<jwt do atacante>` para o
+    // navegador passar a operar na conta do atacante, e tudo que fosse criado
+    // a partir dali nasceria lá dentro.
     if (googleStatus === "connected") {
       refreshUser();
     }
@@ -48,9 +46,13 @@ export default function ApisPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleAuthorizeGoogle = () => {
-    const token = localStorage.getItem("token");
-    window.location.href = `${API_URL}/auth/google?token=${token}`;
+  const handleAuthorizeGoogle = async () => {
+    setErroGoogle(false);
+    try {
+      await conectarGoogle();
+    } catch {
+      setErroGoogle(true);
+    }
   };
 
   const filtered = apis.filter((a) =>
@@ -69,7 +71,7 @@ export default function ApisPage() {
           Conta Google conectada com sucesso!
         </div>
       )}
-      {googleStatus === "error" && (
+      {(googleStatus === "error" || erroGoogle) && (
         <div className="bg-red-900/30 border border-red-700 text-red-400 rounded-lg p-3 mb-4 text-sm">
           Falha ao conectar conta Google. Por favor, tente novamente.
         </div>
