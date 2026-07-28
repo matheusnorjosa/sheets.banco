@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma.js';
 import { ValidationError } from '../lib/errors.js';
 import { jwtAuth } from '../middleware/jwt-auth.js';
 import { authRateLimitOptions } from '../middleware/rate-limiter.js';
+import { JWT_PURPOSE } from '../lib/jwt-purpose.js';
 
 function generateRecoveryCodes(count = 10): string[] {
   return Array.from({ length: count }, () =>
@@ -184,8 +185,13 @@ export async function auth2faRoutes(app: FastifyInstance) {
       }
     }
 
-    // Issue full JWT
-    const token = app.jwt.sign({ sub: user.id, email: user.email });
+    // Issue full JWT — o TOTP (ou um código de recuperação) acabou de ser
+    // conferido, então aqui sim sai um token de sessão.
+    const token = app.jwt.sign({
+      sub: user.id,
+      email: user.email,
+      purpose: JWT_PURPOSE.SESSION,
+    });
 
     return {
       user: {

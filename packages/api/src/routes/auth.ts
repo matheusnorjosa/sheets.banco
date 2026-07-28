@@ -9,6 +9,7 @@ import { jwtAuth } from '../middleware/jwt-auth.js';
 import { authRateLimitOptions } from '../middleware/rate-limiter.js';
 import { env } from '../config/env.js';
 import { encryptOptional } from '../lib/secret-cipher.js';
+import { JWT_PURPOSE } from '../lib/jwt-purpose.js';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -58,7 +59,11 @@ export async function authRoutes(app: FastifyInstance) {
       data: { email, passwordHash, name },
     });
 
-    const token = app.jwt.sign({ sub: user.id, email: user.email });
+    const token = app.jwt.sign({
+      sub: user.id,
+      email: user.email,
+      purpose: JWT_PURPOSE.SESSION,
+    });
 
     return reply.status(201).send({
       user: { id: user.id, email: user.email, name: user.name, googleConnected: false },
@@ -95,16 +100,29 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    // If 2FA is enabled, return a temp token requiring verification
+    // If 2FA is enabled, return a temp token requiring verification.
+    //
+    // Este token prova APENAS a senha. O `purpose` é o que impede o `jwtAuth`
+    // de aceitá-lo como sessão — sem ele, quem tivesse a senha atravessava o
+    // segundo fator usando esta própria resposta como credencial.
     if (user.totpEnabled) {
       const tempToken = app.jwt.sign(
-        { sub: user.id, email: user.email, pending2fa: true },
+        {
+          sub: user.id,
+          email: user.email,
+          pending2fa: true,
+          purpose: JWT_PURPOSE.PENDING_2FA,
+        },
         { expiresIn: '5m' },
       );
       return { requires2FA: true, tempToken };
     }
 
-    const token = app.jwt.sign({ sub: user.id, email: user.email });
+    const token = app.jwt.sign({
+      sub: user.id,
+      email: user.email,
+      purpose: JWT_PURPOSE.SESSION,
+    });
 
     return {
       user: {
@@ -257,7 +275,11 @@ export async function authRoutes(app: FastifyInstance) {
         });
       }
 
-      const jwt = app.jwt.sign({ sub: user.id, email: user.email });
+      const jwt = app.jwt.sign({
+        sub: user.id,
+        email: user.email,
+        purpose: JWT_PURPOSE.SESSION,
+      });
       return reply.redirect(`${env.FRONTEND_URL}/callback?token=${jwt}&google=connected`);
     } catch {
       return reply.redirect(`${env.FRONTEND_URL}/login?google=error`);
