@@ -23,7 +23,7 @@ vi.mock('../config/env.js', () => ({
   env: { LOG_LEVEL: 'debug' },
 }));
 
-const { redactPaths, logger } = await import('./logger.js');
+const { redactPaths, logger, sanitizarUrl, serializadoresDeLog } = await import('./logger.js');
 
 interface LinhaDeLog {
   [chave: string]: unknown;
@@ -242,5 +242,100 @@ describe('logger exportado', () => {
     expect(linha.cpf).toBe(CENSURA);
     expect(linha.googleRefreshToken).toBe(CENSURA);
     expect(linha.nome).toBe('Fulano');
+  });
+});
+
+describe('sanitizarUrl', () => {
+  it('redige o token de sessão que o dashboard manda em /auth/google', () => {
+    // O caso que motivou tudo. Navegação de topo do navegador não aceita
+    // header, então o dashboard põe o próprio JWT na query — e o serializador
+    // padrão do Fastify gravava a URL inteira em toda requisição.
+    const limpa = sanitizarUrl('/auth/google?token=eyJhbGciOiJIUzI1NiJ9.abc.def');
+
+    expect(limpa).not.toContain('eyJhbGciOiJIUzI1NiJ9');
+    expect(limpa).toBe('/auth/google?token=%5BREDACTED%5D');
+  });
+
+  it('redige o code do callback do Google — ele vale por access e refresh token', () => {
+    const limpa = sanitizarUrl('/auth/google/callback?code=4/0AX4Xf&state=%7B%22mode%22%3A%22login%22%7D');
+
+    expect(limpa).not.toContain('4/0AX4Xf');
+    expect(limpa).toContain('state=');
+  });
+
+  it('preserva os parâmetros que servem para depurar', () => {
+    // Cortar a query inteira mataria o leak e o diagnóstico junto: `?sheet=` e
+    // `?days=` são exatamente o que se olha num relato de problema.
+    const limpa = sanitizarUrl('/api/v1/abc?sheet=DAT&days=7&layout=raw');
+
+    expect(limpa).toBe('/api/v1/abc?sheet=DAT&days=7&layout=raw');
+  });
+
+  it('devolve a URL intacta quando não há nada a redigir', () => {
+    // Igualdade por identidade de conteúdo importa: `URLSearchParams.toString()`
+    // re-codifica (espaço vira `+`), e não vale mudar como TODA linha de log
+    // aparece por causa de um caso raro.
+    const original = '/api/v1/abc?sheet=GEST%C3%83O%20ESCOLAR';
+    expect(sanitizarUrl(original)).toBe(original);
+  });
+
+  it('não mexe em URL sem query', () => {
+    expect(sanitizarUrl('/health')).toBe('/health');
+    expect(sanitizarUrl('/api/v1/abc')).toBe('/api/v1/abc');
+  });
+
+  it('reconhece o parâmetro sem depender de maiúscula/minúscula', () => {
+    expect(sanitizarUrl('/x?Token=abc')).not.toContain('abc');
+    expect(sanitizarUrl('/x?API_KEY=abc')).not.toContain('abc');
+  });
+
+  it('redige o valor mesmo com outros parâmetros em volta', () => {
+    const limpa = sanitizarUrl('/callback?token=segredo&google=connected');
+
+    expect(limpa).not.toContain('segredo');
+    expect(limpa).toContain('google=connected');
+  });
+
+  it('aguenta query vazia ou malformada sem estourar', () => {
+    expect(sanitizarUrl('/x?')).toBe('/x?');
+    expect(sanitizarUrl('/x?=&&')).toBeTruthy();
+    expect(sanitizarUrl('/x?token')).toBeTruthy();
+  });
+});
+
+describe('serializadoresDeLog.req', () => {
+  const requisicao = {
+    method: 'GET',
+    url: '/auth/google?token=jwt-secreto',
+    headers: { 'accept-version': '1.0.0' },
+    host: 'api.exemplo.com',
+    ip: '203.0.113.7',
+    socket: { remotePort: 51234 },
+  };
+
+  it('sanitiza a url', () => {
+    expect(serializadoresDeLog.req(requisicao).url).not.toContain('jwt-secreto');
+  });
+
+  it('preserva TODOS os campos do serializador padrão do Fastify', () => {
+    // Substituir o serializador é tudo-ou-nada. Omitir um campo aqui apagaria
+    // em silêncio `method`/`host`/`remoteAddress` de toda linha de log e
+    // quebraria consulta de log existente — sem quebrar nada mais.
+    const saida = serializadoresDeLog.req(requisicao);
+
+    expect(saida).toEqual({
+      method: 'GET',
+      url: '/auth/google?token=%5BREDACTED%5D',
+      version: '1.0.0',
+      host: 'api.exemplo.com',
+      remoteAddress: '203.0.113.7',
+      remotePort: 51234,
+    });
+  });
+
+  it('não quebra com requisição incompleta', () => {
+    // Requisição abortada antes do socket existir, ou dublê de teste magro.
+    expect(() => serializadoresDeLog.req({})).not.toThrow();
+    expect(serializadoresDeLog.req({}).remotePort).toBeUndefined();
   });
 });

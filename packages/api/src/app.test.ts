@@ -22,6 +22,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import pino from 'pino';
 
 /** Hoisted para os testes conseguirem controlar a resolução da SheetApi. */
 const sheetApiDb = vi.hoisted(() => ({
@@ -328,5 +329,69 @@ describe('configuração do servidor', () => {
   it('CSP fica desligada de propósito (o frontend é separado)', async () => {
     const r = await app.inject({ method: 'GET', url: '/health' });
     expect(r.headers['content-security-policy']).toBeUndefined();
+  });
+});
+
+describe('log de requisição não grava segredo da query', () => {
+  /**
+   * Captura as linhas que o logger da aplicação REAL emitiu durante a injeção.
+   *
+   * Testar `sanitizarUrl` isolado prova que a função funciona; só isto prova
+   * que ela está LIGADA no `buildApp`. Esquecer o `serializers:` nas opções do
+   * Fastify passaria por todos os testes de `lib/logger.ts`.
+   *
+   * O `LOG_LEVEL` do dublê de env é `silent` — sem subir o nível aqui, o pino
+   * não emitiria nada e o teste passaria vazio, que é o pior resultado
+   * possível num teste de vazamento.
+   */
+  async function linhasDeLogAoPedir(url: string) {
+    const linhas: Record<string, unknown>[] = [];
+    const alvo = app.log as unknown as Record<symbol, unknown>;
+    const streamOriginal = alvo[pino.symbols.streamSym];
+    const nivelOriginal = app.log.level;
+
+    alvo[pino.symbols.streamSym] = {
+      write(linha: string) {
+        linhas.push(JSON.parse(linha) as Record<string, unknown>);
+      },
+    };
+    app.log.level = 'info';
+
+    try {
+      await app.inject({ method: 'GET', url });
+    } finally {
+      app.log.level = nivelOriginal;
+      alvo[pino.symbols.streamSym] = streamOriginal;
+    }
+
+    return linhas;
+  }
+
+  it('não escreve o token de sessão que vem em ?token=', async () => {
+    const linhas = await linhasDeLogAoPedir('/auth/google?token=jwt-que-nao-pode-vazar');
+
+    expect(linhas.length).toBeGreaterThan(0); // senão não testou nada
+    expect(JSON.stringify(linhas)).not.toContain('jwt-que-nao-pode-vazar');
+  });
+
+  it('registra a rota com o valor redigido, não a linha inteira suprimida', async () => {
+    // Contraponto: sem isto, um serializador que devolvesse `{}` também
+    // passaria no teste acima — e teríamos trocado um vazamento por um log
+    // cego.
+    const linhas = await linhasDeLogAoPedir('/auth/google?token=jwt-que-nao-pode-vazar');
+    const comRequisicao = linhas.find((l) => l.req);
+    const req = comRequisicao?.req as { url?: string; method?: string } | undefined;
+
+    expect(req?.method).toBe('GET');
+    expect(req?.url).toContain('/auth/google');
+    expect(req?.url).toContain('REDACTED');
+  });
+
+  it('preserva parâmetro não sensível na mesma linha', async () => {
+    const linhas = await linhasDeLogAoPedir('/api/v1/qualquer?sheet=DAT&token=segredo');
+    const req = linhas.find((l) => l.req)?.req as { url?: string } | undefined;
+
+    expect(req?.url).toContain('sheet=DAT');
+    expect(JSON.stringify(linhas)).not.toContain('segredo');
   });
 });
