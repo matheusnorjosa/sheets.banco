@@ -333,44 +333,41 @@ describe('DELETE /dashboard/apis/:id/snapshots/:version', () => {
   });
 });
 
-describe('versão não-numérica na URL — comportamento ATUAL (possível bug)', () => {
-  // `Number('abc')` é NaN e vai assim para o Prisma: não há validação de rota
-  // nem checagem de `Number.isInteger`. Em produção o Prisma recusa NaN num
-  // campo Int e o erro sobe como 500 — não como 400/404. Com o Prisma mockado
-  // aqui a resposta acaba sendo 404, então o que este teste TRAVA é o valor
-  // repassado, não o status.
-  it('GET /snapshots/abc manda NaN para o Prisma', async () => {
-    snapshotDb.findUnique.mockResolvedValue(null);
+describe('versão inválida na URL vira 400, não 500', () => {
+  // `Number('abc')` é NaN e ia assim para o Prisma, que recusa NaN num campo
+  // Int — o erro subia como 500 INTERNAL_ERROR. Quem digitou a URL errada via
+  // "erro interno do servidor". Agora a rota valida antes de consultar.
 
-    const r = await app.inject({ method: 'GET', url: '/dashboard/apis/api-1/snapshots/abc' });
+  it.each([
+    ['texto', 'abc'],
+    ['decimal', '1.5'],
+    ['zero', '0'],
+    ['negativo', '-3'],
+    ['vazio-ish', '%20'],
+  ])('GET /snapshots/%s → 400 e o Prisma nem é consultado', async (_rotulo, versao) => {
+    const r = await app.inject({ method: 'GET', url: `/dashboard/apis/api-1/snapshots/${versao}` });
 
-    const where = argDaChamada<{
-      where: { sheetApiId_version: { version: number } };
-    }>(snapshotDb.findUnique).where;
-    expect(Number.isNaN(where.sheetApiId_version.version)).toBe(true);
-    expect(r.statusCode).toBe(404);
+    expect(r.statusCode).toBe(400);
+    expect(r.json().code).toBe('VALIDATION_ERROR');
+    expect(snapshotDb.findUnique).not.toHaveBeenCalled();
   });
 
-  it('DELETE /snapshots/abc idem — NaN chega ao Prisma sem validação', async () => {
-    snapshotDb.findUnique.mockResolvedValue(null);
-
+  it('DELETE segue a mesma regra', async () => {
     const r = await app.inject({ method: 'DELETE', url: '/dashboard/apis/api-1/snapshots/abc' });
 
-    const where = argDaChamada<{
-      where: { sheetApiId_version: { version: number } };
-    }>(snapshotDb.findUnique).where;
-    expect(Number.isNaN(where.sheetApiId_version.version)).toBe(true);
-    expect(r.statusCode).toBe(404);
+    expect(r.statusCode).toBe(400);
+    expect(snapshotDb.findUnique).not.toHaveBeenCalled();
   });
 
-  it('versão decimal (1.5) também passa sem validação', async () => {
+  it('versão inteira positiva continua passando', async () => {
+    // Contraponto: a validação não podia recusar o caso normal.
     snapshotDb.findUnique.mockResolvedValue(null);
 
-    await app.inject({ method: 'GET', url: '/dashboard/apis/api-1/snapshots/1.5' });
+    await app.inject({ method: 'GET', url: '/dashboard/apis/api-1/snapshots/3' });
 
     const where = argDaChamada<{
       where: { sheetApiId_version: { version: number } };
     }>(snapshotDb.findUnique).where;
-    expect(where.sheetApiId_version.version).toBe(1.5);
+    expect(where.sheetApiId_version.version).toBe(3);
   });
 });

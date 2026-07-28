@@ -242,35 +242,50 @@ describe('init* — nome da fila e parse da URL do Redis', () => {
     expect(filaCriada(2).opts.connection.port).toBe(6379);
   });
 
-  it('URL sem senha vira password: undefined (não string vazia)', () => {
+  it('URL sem senha nem usuário devolve só host e porta', () => {
     filaDeEscrita.initSheetsWriteQueue('redis://localhost:6379');
-    expect(filaCriada().opts.connection.password).toBeUndefined();
-    expect('password' in filaCriada().opts.connection).toBe(true);
+    expect(filaCriada().opts.connection).toEqual({ host: 'localhost', port: 6379 });
   });
 
-  it('o usuário da URL é DESCARTADO — só host/porta/senha chegam ao BullMQ', () => {
-    // Upstash e afins usam `default:<token>@`. O username some aqui; a conexão
-    // autentica só com a senha.
+  it('o usuário da URL é PRESERVADO — Redis 6+ com ACL autentica por usuário', () => {
+    // Upstash e afins usam `default:<token>@`. Descartar o username autentica
+    // como `default`, que pode não ter as permissões da fila.
     filaDeSync.initScheduledSyncQueue('redis://default:token-upstash@sa-redis.upstash.io:6379');
     expect(filaCriada().opts.connection).toEqual({
       host: 'sa-redis.upstash.io',
       port: 6379,
+      username: 'default',
       password: 'token-upstash',
     });
   });
 
-  it('o esquema rediss:// não vira opção de TLS (host/porta iguais, sem `tls`)', () => {
+  it('o esquema rediss:// vira opção de TLS', () => {
+    // Antes o esquema era descartado e nenhuma opção `tls` chegava ao BullMQ:
+    // uma URL do Upstash tentaria conexão em texto claro contra um endpoint
+    // que só fala TLS.
     filaDeWebhook.initWebhookDeliveryQueue('rediss://default:token@tls.upstash.io:6380');
     expect(filaCriada().opts.connection).toEqual({
       host: 'tls.upstash.io',
       port: 6380,
+      username: 'default',
       password: 'token',
+      tls: {},
     });
   });
 
-  it('senha percent-encoded chega SEM decodificar (`%40` não vira `@`)', () => {
+  it('redis:// (sem TLS) NÃO ganha a opção tls', () => {
+    // Contraponto: sem isto o teste acima não distinguiria "detecta rediss" de
+    // "liga TLS sempre".
+    filaDeWebhook.initWebhookDeliveryQueue('redis://localhost:6379');
+    expect(filaCriada().opts.connection).not.toHaveProperty('tls');
+  });
+
+  it('senha percent-encoded é DECODIFICADA (`%40` vira `@`)', () => {
+    // `@`, `:`, `/` e `#` obrigam encoding numa URL — são exatamente os
+    // caracteres que um gerador de senha usa. Antes a senha chegava escapada
+    // ao ioredis e a autenticação falhava com NOAUTH, sem pista no log.
     filaDeEscrita.initSheetsWriteQueue('redis://:se%40nha@localhost:6379');
-    expect(filaCriada().opts.connection.password).toBe('se%40nha');
+    expect(filaCriada().opts.connection.password).toBe('se@nha');
   });
 
   it('URL inválida explode na hora do init (new URL lança)', () => {

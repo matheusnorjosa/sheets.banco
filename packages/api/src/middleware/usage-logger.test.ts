@@ -154,23 +154,32 @@ describe('com `request.sheetApi`', () => {
   });
 });
 
-describe('`path` é a URL completa, com querystring', () => {
+describe('`path` é só o caminho — a querystring não entra na telemetria', () => {
   beforeEach(() => {
     sheetApiAtual = { id: 'api-1' };
   });
 
-  it('preserva a querystring inteira (não só o caminho da rota)', async () => {
+  it('descarta a querystring, guardando só o caminho da rota', async () => {
     await app.inject({ method: 'GET', url: '/eco?sheet=Agenda&limit=10' });
-    expect(entradaEnfileirada().path).toBe('/eco?sheet=Agenda&limit=10');
+    expect(entradaEnfileirada().path).toBe('/eco');
   });
 
-  it('grava dado sensível vindo em filtro de querystring — comportamento atual', async () => {
-    // Trava consciente: o UsageLog guarda a query como veio. Um filtro por CPF
-    // vira PII persistida no banco de telemetria.
+  it('URL sem querystring passa inalterada', async () => {
+    // Contraponto: sem ele o teste acima não distinguiria "corta a query" de
+    // "corta sempre no primeiro caractere".
+    await app.inject({ method: 'GET', url: '/eco' });
+    expect(entradaEnfileirada().path).toBe('/eco');
+  });
+
+  it('filtro com dado sensível na querystring NÃO chega ao UsageLog', async () => {
+    // O motivo do corte. A API aceita filtro por querystring, então gravar a
+    // URL inteira colocava PII numa tabela de telemetria que ninguém trata
+    // como PII — sem política de retenção, de acesso ou de export.
     await app.inject({ method: 'GET', url: '/eco?filtro=cpf%3A12345678900' });
     const path = entradaEnfileirada().path;
-    expect(path).toBe('/eco?filtro=cpf%3A12345678900');
-    expect(path).toContain('12345678900');
+
+    expect(path).toBe('/eco');
+    expect(path).not.toContain('12345678900');
   });
 });
 

@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import { buildJobOptions } from '../lib/queue-options.js';
+import { conexaoRedisDe } from '../lib/redis-connection.js';
 
 export interface SyncJobData {
   sheetApiId: string;
@@ -10,13 +11,8 @@ export interface SyncJobData {
 let queue: Queue<SyncJobData> | null = null;
 
 export function initScheduledSyncQueue(redisUrl: string): Queue<SyncJobData> {
-  const url = new URL(redisUrl);
   queue = new Queue<SyncJobData>('scheduled-sync', {
-    connection: {
-      host: url.hostname,
-      port: Number(url.port) || 6379,
-      password: url.password || undefined,
-    },
+    connection: conexaoRedisDe(redisUrl),
     // Fewer attempts — sync is repeatable; the next cron fire will re-do the
     // invalidation anyway, so deep retry loops are wasteful.
     defaultJobOptions: buildJobOptions({

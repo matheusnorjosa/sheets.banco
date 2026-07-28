@@ -337,11 +337,11 @@ describe('PATCH /dashboard/apis/:id/computed-fields/:fieldId — atualização',
     expect(computedFieldDb.update).not.toHaveBeenCalled();
   });
 
-  it('ASSIMETRIA POST × PATCH: expression de 5000 caracteres passa no PATCH', async () => {
-    // Documenta o comportamento de HOJE, não o desejável. O POST barra em 500
-    // (`createFieldSchema`); o PATCH só testa `!body?.expression`, então tudo
-    // que for truthy entra — inclusive dez vezes o limite do POST. Quem quiser
-    // burlar o `max(500)` cria com 1 caractere e faz PATCH com 5000.
+  it('PATCH aplica o MESMO max(500) do POST', async () => {
+    // Antes o PATCH só testava `!body?.expression`, então tudo que fosse
+    // truthy entrava — inclusive dez vezes o limite do POST. Quem quisesse
+    // burlar o `max(500)` criava o campo com 1 caractere e dava PATCH com
+    // 5000. E a expressão é avaliada para CADA linha de CADA resposta.
     const gigante = 'x'.repeat(5000);
 
     const r = await app.inject({
@@ -350,11 +350,11 @@ describe('PATCH /dashboard/apis/:id/computed-fields/:fieldId — atualização',
       payload: { expression: gigante },
     });
 
-    expect(r.statusCode).toBe(200);
-    expect(argDaChamada<{ data: { expression: string } }>(computedFieldDb.update).data.expression)
-      .toHaveLength(5000);
+    expect(r.statusCode).toBe(400);
+    expect(computedFieldDb.update).not.toHaveBeenCalled();
 
-    // Prova do contraste: a mesma expression no POST é rejeitada.
+    // E o POST continua barrando o mesmo valor — os dois caminhos agora
+    // usam a mesma regra.
     const rPost = await app.inject({
       method: 'POST',
       url: '/dashboard/apis/api-1/computed-fields',
@@ -363,16 +363,28 @@ describe('PATCH /dashboard/apis/:id/computed-fields/:fieldId — atualização',
     expect(rPost.statusCode).toBe(400);
   });
 
-  it('o PATCH também não checa o tipo: expression numérica entra como número', async () => {
-    // Complemento da assimetria acima — sem Zod, nada força `string`.
+  it('exatamente 500 caracteres passa no PATCH — a fronteira', async () => {
+    // Contraponto: a validação não podia recusar o limite legítimo.
+    const r = await app.inject({
+      method: 'PATCH',
+      url: '/dashboard/apis/api-1/computed-fields/campo-1',
+      payload: { expression: 'x'.repeat(500) },
+    });
+
+    expect(r.statusCode).toBe(200);
+  });
+
+  it('PATCH recusa expression que não é string', async () => {
+    // Sem Zod, um número entrava direto e o erro saía do driver do banco como
+    // 500 opaco, em vez de 400 com mensagem útil.
     const r = await app.inject({
       method: 'PATCH',
       url: '/dashboard/apis/api-1/computed-fields/campo-1',
       payload: { expression: 42 },
     });
 
-    expect(r.statusCode).toBe(200);
-    expect(argDaChamada<{ data: { expression: unknown } }>(computedFieldDb.update).data.expression).toBe(42);
+    expect(r.statusCode).toBe(400);
+    expect(computedFieldDb.update).not.toHaveBeenCalled();
   });
 });
 

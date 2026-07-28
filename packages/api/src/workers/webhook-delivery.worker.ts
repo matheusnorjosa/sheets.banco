@@ -4,6 +4,7 @@ import type { WebhookDeliveryJobData } from '../queues/webhook-delivery.queue.js
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { decryptIfEncrypted } from '../lib/secret-cipher.js';
+import { conexaoRedisDe } from '../lib/redis-connection.js';
 
 const log = logger.child({ component: 'worker:webhook-delivery' });
 
@@ -43,20 +44,35 @@ async function processJob(job: Job<WebhookDeliveryJobData>): Promise<void> {
       signal: controller.signal,
     });
 
-    // Update delivery record
+    // Uma escrita só por tentativa. Antes, o `throw` abaixo caía no `catch`
+    // do MESMO bloco, então uma resposta não-ok gerava dois updates: o
+    // primeiro gravava 'failed' + responseCode e o segundo reescrevia para
+    // 'pending'. O estado final era o mesmo, mas ao custo de duas idas ao
+    // Postgres por entrega falhada — e lendo o código ninguém diria isso.
+    const ultimaTentativa = job.attemptsMade + 1 >= 5;
     await prisma.webhookDelivery.updateMany({
       where: { id: deliveryId, subscriptionId },
       data: {
-        status: response.ok ? 'success' : 'failed',
+        status: response.ok ? 'success' : ultimaTentativa ? 'failed' : 'pending',
         attempts: job.attemptsMade + 1,
         responseCode: response.status,
       },
     });
 
     if (!response.ok) {
-      throw new Error(`Webhook returned ${response.status}`);
+      // `respostaNaoOk` marca que a linha JÁ foi atualizada: o catch abaixo
+      // trata só falha ANTES de haver resposta (rede, DNS, timeout).
+      throw Object.assign(new Error(`Webhook returned ${response.status}`), {
+        respostaNaoOk: true,
+      });
     }
   } catch (err) {
+    // Resposta não-ok já teve a linha atualizada logo acima; repropaga sem
+    // escrever de novo. O `finally` cuida do `clearTimeout` nos dois caminhos.
+    if ((err as { respostaNaoOk?: boolean })?.respostaNaoOk) {
+      throw err; // Let BullMQ handle retry
+    }
+
     // Update delivery attempt count
     await prisma.webhookDelivery.updateMany({
       where: { id: deliveryId, subscriptionId },
@@ -73,16 +89,11 @@ async function processJob(job: Job<WebhookDeliveryJobData>): Promise<void> {
 }
 
 export function initWebhookDeliveryWorker(redisUrl: string): Worker<WebhookDeliveryJobData> {
-  const url = new URL(redisUrl);
   worker = new Worker<WebhookDeliveryJobData>(
     'webhook-delivery',
     processJob,
     {
-      connection: {
-        host: url.hostname,
-        port: Number(url.port) || 6379,
-        password: url.password || undefined,
-      },
+      connection: conexaoRedisDe(redisUrl),
       concurrency: 5,
     },
   );

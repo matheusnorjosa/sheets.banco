@@ -29,8 +29,13 @@ export const redactPaths = [
   // secrets & PII — top level and one level deep
   'password', 'passwordHash', 'hmacSecret', 'secret', 'bearerToken', 'bearerTokenHash',
   'basicPass', 'basicPassHash', 'keyHash', 'googleAccessToken', 'googleRefreshToken', 'cpf',
+  // A lista de curingas tem que espelhar a de raiz. `bearerTokenHash`,
+  // `basicPassHash` e `keyHash` estavam so na raiz: logar um registro do
+  // Prisma um nivel abaixo (`{ api: { bearerTokenHash } }`, que e o formato
+  // natural de `log.info({ api }, ...)`) vazava o hash.
   '*.password', '*.passwordHash', '*.hmacSecret', '*.secret', '*.bearerToken',
-  '*.basicPass', '*.googleAccessToken', '*.googleRefreshToken', '*.cpf',
+  '*.bearerTokenHash', '*.basicPass', '*.basicPassHash', '*.keyHash',
+  '*.googleAccessToken', '*.googleRefreshToken', '*.cpf',
 ];
 
 export const logger = pino({

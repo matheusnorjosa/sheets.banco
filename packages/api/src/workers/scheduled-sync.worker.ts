@@ -2,6 +2,7 @@ import { Worker, type Job } from 'bullmq';
 import type { SyncJobData } from '../queues/scheduled-sync.queue.js';
 import { invalidateCache } from '../services/google-sheets.service.js';
 import { logger } from '../lib/logger.js';
+import { conexaoRedisDe } from '../lib/redis-connection.js';
 
 const log = logger.child({ component: 'worker:scheduled-sync' });
 
@@ -16,17 +17,12 @@ async function processSync(job: Job<SyncJobData>): Promise<void> {
 }
 
 export function initScheduledSyncWorker(redisUrl: string): Worker<SyncJobData> {
-  const url = new URL(redisUrl);
 
   worker = new Worker<SyncJobData>(
     'scheduled-sync',
     processSync,
     {
-      connection: {
-        host: url.hostname,
-        port: Number(url.port) || 6379,
-        password: url.password || undefined,
-      },
+      connection: conexaoRedisDe(redisUrl),
       concurrency: 2,
     },
   );

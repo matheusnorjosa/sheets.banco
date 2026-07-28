@@ -5,6 +5,10 @@ import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 
+const updateFieldSchema = z.object({
+  expression: z.string().min(1).max(500),
+});
+
 const createFieldSchema = z.object({
   name: z.string().min(1).max(50).regex(/^\w+$/, 'Name must be alphanumeric with underscores'),
   expression: z.string().min(1).max(500),
@@ -74,10 +78,15 @@ export async function computedFieldRoutes(app: FastifyInstance) {
     const existing = await prisma.sheetApi.findFirst({ where: { id, userId } });
     if (!existing) throw new NotFoundError('API not found.');
 
-    const body = request.body as { expression?: string };
-    if (!body?.expression) {
-      throw new ValidationError('Provide an "expression".');
+    // Valida com o MESMO schema do POST em vez de só checar "existe e não é
+    // vazia". A assimetria anterior era burlável: criava-se o campo com um
+    // caractere e depois se dava PATCH com 5000 — e a expressão é avaliada
+    // para CADA linha de CADA resposta, então o limite existe por um motivo.
+    const parsedBody = updateFieldSchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      throw new ValidationError('Provide a valid "expression" (1-500 chars).');
     }
+    const body = parsedBody.data;
 
     const field = await prisma.computedField.findFirst({
       where: { id: fieldId, sheetApiId: id },

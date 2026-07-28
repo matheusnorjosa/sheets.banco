@@ -1,6 +1,22 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
-import { NotFoundError } from '../../lib/errors.js';
+import { NotFoundError, ValidationError } from '../../lib/errors.js';
+
+/**
+ * Converte o `:version` da rota em inteiro, recusando o que não é.
+ *
+ * `Number('abc')` é `NaN` e `Number('1.5')` é `1.5`; os dois iam direto para o
+ * Prisma num campo `Int`, que os recusa — e o erro subia como 500
+ * INTERNAL_ERROR, não como o 400 que o cliente merecia. Quem digitou a URL
+ * errada via "erro interno do servidor".
+ */
+function versaoValida(bruto: string): number {
+  const n = Number(bruto);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new ValidationError('A versão do snapshot deve ser um inteiro positivo.');
+  }
+  return n;
+}
 import { jwtAuth } from '../../middleware/jwt-auth.js';
 import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 import * as sheetsService from '../../services/google-sheets.service.js';
@@ -83,7 +99,7 @@ export async function snapshotRoutes(app: FastifyInstance) {
     if (!existing) throw new NotFoundError('API not found.');
 
     const snapshot = await prisma.snapshot.findUnique({
-      where: { sheetApiId_version: { sheetApiId: id, version: Number(version) } },
+      where: { sheetApiId_version: { sheetApiId: id, version: versaoValida(version) } },
     });
     if (!snapshot) throw new NotFoundError('Snapshot not found.');
 
@@ -99,7 +115,7 @@ export async function snapshotRoutes(app: FastifyInstance) {
     if (!existing) throw new NotFoundError('API not found.');
 
     const snapshot = await prisma.snapshot.findUnique({
-      where: { sheetApiId_version: { sheetApiId: id, version: Number(version) } },
+      where: { sheetApiId_version: { sheetApiId: id, version: versaoValida(version) } },
     });
     if (!snapshot) throw new NotFoundError('Snapshot not found.');
 

@@ -24,7 +24,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { argDaChamada } from '../test-utils/app.js';
 
 interface OpcoesDoWorker {
-  connection: { host: string; port: number; password: string | undefined };
+  connection: { host: string; port: number; username?: string; password?: string; tls?: Record<string, never> };
   concurrency: number;
 }
 
@@ -135,6 +135,7 @@ describe('initScheduledSyncWorker', () => {
     expect(opcoes().connection).toEqual({
       host: 'meu-host.upstash.io',
       port: 6380,
+      username: 'default',
       password: 'minhaSenha',
     });
   });
@@ -155,14 +156,17 @@ describe('initScheduledSyncWorker', () => {
     expect(opcoes().connection.password).toBeUndefined();
   });
 
-  it('mantém a senha percent-encoded como veio da URL (sem decode)', async () => {
-    // Comportamento REAL, não desejado: `URL.password` devolve a forma
-    // percent-encoded. Uma senha com "@" na URL chega ao Redis como "%40".
+  it('decodifica a senha percent-encoded — `%40` vira `@`', async () => {
+    // `@`, `:`, `/` e `#` obrigam encoding numa URL, e são exatamente os
+    // caracteres que um gerador de senha usa. Antes a senha chegava escapada
+    // ao ioredis e a autenticação falhava com NOAUTH, sem pista no log.
     const { initScheduledSyncWorker } = await carregarModulo();
 
     initScheduledSyncWorker('rediss://default:se%40nha@host.io:6380');
 
-    expect(opcoes().connection.password).toBe('se%40nha');
+    expect(opcoes().connection.password).toBe('se@nha');
+    // E o `rediss://` passa a ligar TLS, que antes era descartado.
+    expect(opcoes().connection.tls).toEqual({});
   });
 
   it('aceita o esquema rediss:// (TLS) sem alterar host/porta', async () => {

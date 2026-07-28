@@ -13,7 +13,11 @@ export function registerUsageLogger(app: FastifyInstance) {
     enqueueUsageLog({
       sheetApiId: sheetApi.id,
       method: request.method,
-      path: request.url,
+      // So o caminho, sem a querystring. A API aceita filtro por querystring
+      // (`?cpf=...`), e gravar a URL inteira colocava PII numa tabela de
+      // telemetria que ninguem trata como PII — sem politica de retencao, de
+      // acesso ou de export. O caminho basta para "qual rota foi chamada".
+      path: request.url.split('?')[0] ?? request.url,
       statusCode: reply.statusCode,
       responseMs: Math.round(reply.elapsedTime),
       ip: request.ip,

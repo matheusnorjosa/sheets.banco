@@ -61,19 +61,25 @@ export async function multiSpreadsheetRoutes(app: FastifyInstance) {
 
     const spreadsheetId = extractSpreadsheetId(parsed.data.spreadsheetUrl);
 
-    // Validate access
-    try {
-      await sheetsService.getColumnNames(userId, spreadsheetId);
-    } catch {
-      throw new ValidationError('Could not access the spreadsheet. Make sure it is shared with your Google account.');
-    }
-
-    // Check for duplicate
+    // Duplicata ANTES do acesso ao Google: a ordem inversa gastava cota da
+    // Sheets API só para depois responder 400 — um cliente com retry em cima
+    // de planilha já vinculada queimava quota para sempre.
     const duplicate = await prisma.additionalSheet.findUnique({
       where: { sheetApiId_spreadsheetId: { sheetApiId: id, spreadsheetId } },
     });
     if (duplicate) {
       throw new ValidationError('This spreadsheet is already linked to this API.');
+    }
+
+    // Validate access
+    try {
+      await sheetsService.getColumnNames(userId, spreadsheetId);
+    } catch (err) {
+      // O `catch` vazio anterior engolia a causa: falha transitória do Google
+      // (timeout, 5xx) era reportada como "compartilhe a planilha", mandando
+      // quem configurou para o caminho errado e sem deixar rastro no log.
+      app.log.warn({ err, spreadsheetId, userId }, 'Falha ao acessar planilha adicional');
+      throw new ValidationError('Could not access the spreadsheet. Make sure it is shared with your Google account.');
     }
 
     const sheet = await prisma.additionalSheet.create({

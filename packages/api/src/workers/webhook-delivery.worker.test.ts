@@ -250,6 +250,7 @@ describe('initWebhookDeliveryWorker — fila, concorrência e conexão', () => {
     expect(opts.connection).toEqual({
       host: 'redis.example.com',
       port: 6380,
+      username: 'default',
       password: 'senha-do-redis',
     });
   });
@@ -262,13 +263,14 @@ describe('initWebhookDeliveryWorker — fila, concorrência e conexão', () => {
     expect(opts.connection.password).toBeUndefined();
   });
 
-  it('aceita rediss:// (TLS) — só host/porta/senha importam', () => {
+  it('rediss:// vira opção de TLS — antes o esquema era descartado', () => {
     modulo.initWebhookDeliveryWorker('rediss://:apenas-senha@upstash.io:6379');
     const opts = capturado.opts as unknown as OptsWorker;
     expect(opts.connection).toEqual({
       host: 'upstash.io',
       port: 6379,
       password: 'apenas-senha',
+      tls: {},
     });
   });
 
@@ -464,31 +466,39 @@ describe('sucesso (response.ok)', () => {
 });
 
 describe('resposta não-ok do destino', () => {
-  it('500 grava failed + responseCode e lança "Webhook returned 500"', async () => {
+  it('500 numa tentativa intermediária grava pending + responseCode, e lança', async () => {
+    // O status reflete que AINDA HÁ retentativa; o responseCode registra o que
+    // o destino respondeu. Antes eram duas escritas: a primeira gravava
+    // 'failed' e a segunda reescrevia para 'pending' — o mesmo estado final, ao
+    // custo de duas idas ao Postgres por entrega falhada.
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
 
     await expect(processador()(jobFalso())).rejects.toThrow('Webhook returned 500');
-    expect(argsUpdate(0).data).toEqual({ status: 'failed', attempts: 1, responseCode: 500 });
+
+    expect(updateManyMock).toHaveBeenCalledTimes(1);
+    expect(argsUpdate(0).data).toEqual({ status: 'pending', attempts: 1, responseCode: 500 });
   });
 
-  it('o throw cai no próprio catch: 2º update reescreve para pending quando ainda há retentativa', async () => {
+  it('uma escrita por tentativa, não duas', async () => {
+    // Guarda-corpo contra a regressão: se o `throw` voltar a cair no próprio
+    // catch, este teste acusa.
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
 
     await expect(processador()(jobFalso({ attemptsMade: 1 }))).rejects.toThrow();
 
-    expect(updateManyMock).toHaveBeenCalledTimes(2);
-    expect(argsUpdate(0).data).toEqual({ status: 'failed', attempts: 2, responseCode: 500 });
-    // Sem responseCode aqui — o valor gravado no 1º update permanece na linha.
-    expect(argsUpdate(1).data).toEqual({ status: 'pending', attempts: 2 });
+    expect(updateManyMock).toHaveBeenCalledTimes(1);
+    expect(argsUpdate(0).data).toEqual({ status: 'pending', attempts: 2, responseCode: 500 });
   });
 
-  it('na última tentativa (attemptsMade 4) o 2º update mantém failed', async () => {
+  it('na última tentativa (attemptsMade 4) grava failed, com o responseCode', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 503 });
 
     await expect(processador()(jobFalso({ attemptsMade: 4 }))).rejects.toThrow(
       'Webhook returned 503',
     );
-    expect(argsUpdate(1).data).toEqual({ status: 'failed', attempts: 5 });
+
+    expect(updateManyMock).toHaveBeenCalledTimes(1);
+    expect(argsUpdate(0).data).toEqual({ status: 'failed', attempts: 5, responseCode: 503 });
   });
 
   it('404 também é falha (só response.ok conta)', async () => {

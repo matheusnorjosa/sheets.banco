@@ -183,17 +183,17 @@ describe('redactPaths — o que NÃO é redigido (limites conhecidos)', () => {
     expect(b.password).toBe('passa-em-texto-claro');
   });
 
-  it('`*.bearerTokenHash`, `*.basicPassHash` e `*.keyHash` não estão na lista', () => {
-    // Assimetria da lista: os três são redigidos na RAIZ mas não um nível
-    // abaixo (ver logger.ts:30-33). Logar `{ sheetApi: registroDoPrisma }`
-    // — o formato natural — deixa o hash bcrypt sair no log.
+  it('`*.bearerTokenHash`, `*.basicPassHash` e `*.keyHash` também são redigidos', () => {
+    // A lista de curingas precisa espelhar a de raiz. Os três estavam só na
+    // raiz, então logar `{ sheetApi: registroDoPrisma }` — o formato natural
+    // de `log.info({ sheetApi }, ...)` — deixava o hash bcrypt sair no log.
     const linha = logar({
       sheetApi: { bearerTokenHash: '$2b$10$hash', basicPassHash: '$2b$10$hash2', keyHash: '$2b$10$hash3' },
     });
     const sheetApi = linha.sheetApi as Record<string, unknown>;
-    expect(sheetApi.bearerTokenHash).toBe('$2b$10$hash');
-    expect(sheetApi.basicPassHash).toBe('$2b$10$hash2');
-    expect(sheetApi.keyHash).toBe('$2b$10$hash3');
+    expect(sheetApi.bearerTokenHash).toBe('[REDACTED]');
+    expect(sheetApi.basicPassHash).toBe('[REDACTED]');
+    expect(sheetApi.keyHash).toBe('[REDACTED]');
   });
 
   it('valor sensível dentro da MENSAGEM de texto não é tocado', () => {

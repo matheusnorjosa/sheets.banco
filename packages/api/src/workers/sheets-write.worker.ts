@@ -4,6 +4,7 @@ import * as sheetsService from '../services/google-sheets.service.js';
 import { dispatchWebhooks } from '../services/webhook.service.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { conexaoRedisDe } from '../lib/redis-connection.js';
 
 const log = logger.child({ component: 'worker:sheets-write' });
 
@@ -77,17 +78,12 @@ async function processJob(job: Job<SheetWriteJobData, SheetWriteResult>): Promis
 }
 
 export function initSheetsWriteWorker(redisUrl: string): Worker<SheetWriteJobData, SheetWriteResult> {
-  const url = new URL(redisUrl);
 
   worker = new Worker<SheetWriteJobData, SheetWriteResult>(
     'sheets-write',
     processJob,
     {
-      connection: {
-        host: url.hostname,
-        port: Number(url.port) || 6379,
-        password: url.password || undefined,
-      },
+      connection: conexaoRedisDe(redisUrl),
       concurrency: 3, // max 3 concurrent writes (across different spreadsheets)
       limiter: {
         max: 4,       // max 4 jobs per second (Google Sheets quota: 300/min)
