@@ -690,43 +690,77 @@ describe('ausência de retry e de timeout', () => {
   });
 });
 
-describe('ACHADO: o tipo de retorno de create/update/delete não bate com o modo padrão da API', () => {
+describe('escrita: assíncrona por padrão, síncrona sob demanda', () => {
   // A rota de escrita da API só executa na hora quando recebe `?sync=true`.
   // Sem isso ela ENFILEIRA (BullMQ) e responde **202** com
-  // `{ queued: true, jobId }` — ver `packages/api/src/routes/v1/sheets.ts`
-  // (POST/PATCH/DELETE `/:apiId...`). O SDK nunca manda `sync=true` e declara
-  // que devolve `{ created: number }` / `{ updated: number }` /
-  // `{ deleted: number }`.
+  // `{ queued: true, jobId }` — ver `packages/api/src/routes/v1/sheets.ts`.
   //
-  // Resultado no consumidor: `res.created` é `undefined` — mas o TypeScript
-  // afirma que é `number`. Um `if (res.created > 0)` compila e é sempre falso.
-  // E não há como pedir o modo síncrono pelo SDK: os métodos não aceitam opções.
+  // O SDK declarava `Promise<{ created: number }>` e nunca pedia o modo
+  // síncrono. `res.created` era `undefined` em runtime enquanto o TypeScript
+  // afirmava que era `number`: um `if (res.created > 0)` compilava e era
+  // sempre falso. Hoje o retorno é união discriminada e o modo é escolha de
+  // quem chama.
 
-  it('create nunca manda sync=true, então a API responde 202 enfileirado', async () => {
+  it('create sem opção não manda sync e devolve o corpo enfileirado', async () => {
     stubJson({ queued: true, jobId: 'job_1' }, 202);
     const res = await cliente().create({ a: '1' });
+
     expect(ultimaUrl()).not.toContain('sync');
-    // O SDK devolve o corpo cru: `created` prometido pelo tipo não existe.
     expect(res).toEqual({ queued: true, jobId: 'job_1' });
-    expect(res.created).toBeUndefined();
   });
 
-  it('update e delete têm o mesmo descompasso', async () => {
-    stubJson({ queued: true, jobId: 'job_2' }, 202);
-    const atualizado = await cliente().update('a', '1', { b: '2' });
-    expect(ultimaUrl()).not.toContain('sync');
-    expect(atualizado.updated).toBeUndefined();
-
-    stubJson({ queued: true, jobId: 'job_3' }, 202);
-    const removido = await cliente().delete('a', '1');
-    expect(ultimaUrl()).not.toContain('sync');
-    expect(removido.deleted).toBeUndefined();
-  });
-
-  it('no modo síncrono (que o SDK não sabe pedir) o tipo declarado bateria', async () => {
-    // Contraponto: o formato prometido existe, só não é o do caminho padrão.
+  it('create com { sync: true } manda sync=true e devolve a contagem', async () => {
     stubJson({ created: 2 }, 201);
-    await expect(cliente().create([{ a: '1' }, { a: '2' }])).resolves.toEqual({ created: 2 });
+    const res = await cliente().create([{ a: '1' }, { a: '2' }], { sync: true });
+
+    expect(ultimaUrl()).toContain('sync=true');
+    expect(res).toEqual({ created: 2 });
+  });
+
+  it('update e delete seguem a mesma regra', async () => {
+    stubJson({ queued: true, matchedRows: 3 }, 202);
+    await cliente().update('a', '1', { b: '2' });
+    expect(ultimaUrl()).not.toContain('sync');
+
+    stubJson({ updated: 3 });
+    await cliente().update('a', '1', { b: '2' }, { sync: true });
+    expect(ultimaUrl()).toContain('sync=true');
+
+    stubJson({ queued: true, matchedRows: 1 }, 202);
+    await cliente().delete('a', '1');
+    expect(ultimaUrl()).not.toContain('sync');
+
+    stubJson({ deleted: 1 });
+    await cliente().delete('a', '1', { sync: true });
+    expect(ultimaUrl()).toContain('sync=true');
+  });
+
+  it('`queued in res` estreita a união nos dois sentidos', async () => {
+    // É o teste que prova que o tipo serve para alguma coisa: sem a união
+    // discriminada, o consumidor não teria como saber qual formato chegou.
+    stubJson({ queued: true, jobId: 'job_9' }, 202);
+    const enfileirado = await cliente().create({ a: '1' });
+
+    if ('queued' in enfileirado) {
+      expect(enfileirado.jobId).toBe('job_9');
+    } else {
+      throw new Error('esperava resposta enfileirada');
+    }
+
+    stubJson({ created: 1 }, 201);
+    const sincrono = await cliente().create({ a: '1' }, { sync: true });
+
+    if ('queued' in sincrono) {
+      throw new Error('esperava resposta síncrona');
+    } else {
+      expect(sincrono.created).toBe(1);
+    }
+  });
+
+  it('{ sync: false } é igual a não pedir nada', async () => {
+    stubJson({ queued: true }, 202);
+    await cliente().create({ a: '1' }, { sync: false });
+    expect(ultimaUrl()).not.toContain('sync=true');
   });
 });
 

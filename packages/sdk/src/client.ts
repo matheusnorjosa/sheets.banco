@@ -1,5 +1,13 @@
 import { SheetsBancoError, NetworkError } from './errors.js';
-import type { SheetsBancoConfig, ReadOptions, SearchOptions, SheetRow } from './types.js';
+import type {
+  SheetsBancoConfig,
+  ReadOptions,
+  SearchOptions,
+  SheetRow,
+  SheetRowCastNumbers,
+  WriteOptions,
+  WriteResponse,
+} from './types.js';
 
 export class SheetsBanco {
   private apiId: string;
@@ -65,10 +73,17 @@ export class SheetsBanco {
   }
 
   /**
-   * Read all rows from the sheet.
+   * Lê as linhas da planilha.
+   *
+   * As sobrecargas existem porque `cast_numbers` muda o TIPO do que volta: sem
+   * ele toda célula é string; com ele a API converte o que parece número. Um
+   * retorno único `string | number` obrigaria todo mundo a estreitar mesmo no
+   * caso padrão, em que nunca vem número.
    */
-  async read(options: ReadOptions = {}): Promise<SheetRow[]> {
-    const query = this.buildQuery(options as any);
+  async read(options?: ReadOptions & { cast_numbers?: false }): Promise<SheetRow[]>;
+  async read(options: ReadOptions & { cast_numbers: true }): Promise<SheetRowCastNumbers[]>;
+  async read(options: ReadOptions = {}): Promise<SheetRow[] | SheetRowCastNumbers[]> {
+    const query = this.buildQuery(options as Record<string, string | number | boolean | undefined>);
     const result = await this.request<SheetRow[] | SheetRow>(this.endpoint + query);
     return Array.isArray(result) ? result : [result];
   }
@@ -102,34 +117,60 @@ export class SheetsBanco {
   }
 
   /**
-   * Create one or more rows.
+   * Cria uma ou mais linhas.
+   *
+   * **Por padrão a escrita é assíncrona**: a API enfileira o job e responde
+   * `202 { queued: true, jobId }` sem ter tocado na planilha ainda. Passe
+   * `{ sync: true }` para que ela escreva na hora e devolva `{ created }`.
+   *
+   * O retorno é união porque a resposta realmente muda de forma. Antes daqui
+   * o método declarava `Promise<{ created: number }>` e nunca pedia o modo
+   * síncrono — então `resultado.created` era `undefined` em tempo de execução
+   * enquanto o TypeScript afirmava que era `number`, e um
+   * `if (resultado.created > 0)` compilava e era sempre falso.
+   *
+   * Para estreitar: `if ('queued' in resultado) ... else ...`.
    */
-  async create(data: Record<string, string> | Record<string, string>[]): Promise<{ created: number }> {
-    return this.request(this.endpoint, {
+  async create(
+    data: SheetRow | SheetRow[],
+    options: WriteOptions = {},
+  ): Promise<WriteResponse> {
+    return this.request(this.endpoint + this.buildQuery({ sync: options.sync }), {
       method: 'POST',
       body: JSON.stringify({ data }),
     });
   }
 
   /**
-   * Update rows where `column` equals `value`.
+   * Atualiza as linhas em que `column` é igual a `value`.
+   *
+   * Assíncrona por padrão — ver {@link SheetsBanco.create}.
    */
   async update(
     column: string,
     value: string,
-    data: Record<string, string>,
-  ): Promise<{ updated: number }> {
-    return this.request(`${this.endpoint}/${encodeURIComponent(column)}/${encodeURIComponent(value)}`, {
+    data: SheetRow,
+    options: WriteOptions = {},
+  ): Promise<WriteResponse> {
+    const alvo = `${this.endpoint}/${encodeURIComponent(column)}/${encodeURIComponent(value)}`;
+    return this.request(alvo + this.buildQuery({ sync: options.sync }), {
       method: 'PATCH',
       body: JSON.stringify({ data }),
     });
   }
 
   /**
-   * Delete rows where `column` equals `value`.
+   * Apaga as linhas em que `column` é igual a `value`.
+   *
+   * Assíncrona por padrão — ver {@link SheetsBanco.create}.
    */
-  async delete(column: string, value: string): Promise<{ deleted: number }> {
-    return this.request(`${this.endpoint}/${encodeURIComponent(column)}/${encodeURIComponent(value)}`, {
+  async delete(
+    column: string,
+    value: string,
+    options: WriteOptions = {},
+  ): Promise<WriteResponse> {
+    const alvo = `${this.endpoint}/${encodeURIComponent(column)}/${encodeURIComponent(value)}`;
+    return this.request(alvo + this.buildQuery({ sync: options.sync }), {
       method: 'DELETE',
     });
   }
