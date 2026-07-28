@@ -48,12 +48,24 @@ function criarArmazenamento(inicial: Record<string, string> = {}) {
   };
 }
 
-/** Resposta mínima com o que o cliente consome: `status`, `ok` e `text()`. */
-function resposta(status: number, corpo = '') {
+/**
+ * Resposta mínima com o que o cliente consome: `status`, `ok`, `text()` e
+ * `headers`.
+ *
+ * O `headers` não é enfeite: o cliente lê `X-Request-Id` do header quando o
+ * corpo não traz `request_id`. Um dublê sem ele quebra com "Cannot read
+ * properties of undefined" — erro do TESTE, não do código, e que esconderia o
+ * comportamento real.
+ */
+function resposta(status: number, corpo = '', headers: Record<string, string> = {}) {
+  const normalizados = new Map(
+    Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]),
+  );
   return {
     status,
     ok: status >= 200 && status < 300,
     text: async () => corpo,
+    headers: { get: (nome: string) => normalizados.get(nome.toLowerCase()) ?? null },
   } as unknown as Response;
 }
 
@@ -138,13 +150,19 @@ describe('URL base', () => {
     expect(ultimaChamada().url).toBe('https://api.exemplo.com/auth/me');
   });
 
-  it('string vazia no env não vale como URL — volta para o localhost', async () => {
-    // Contraponto do teste acima: o código usa `||`, não `??`. Um env
-    // declarado-mas-vazio na Vercel silenciosamente aponta o dashboard de
-    // produção para a máquina de quem abriu o navegador.
+  it('string vazia no env NÃO cai no localhost — o fallback é só para ausente', async () => {
+    // Este é o teste que fecha o defeito mais perigoso do arquivo. Com `||`,
+    // uma NEXT_PUBLIC_API_URL declarada-mas-vazia na Vercel (fácil de
+    // acontecer: cria a variável, esquece o valor) fazia o dashboard de
+    // PRODUÇÃO apontar para o localhost de quem abrisse o navegador — em
+    // silêncio, com a tela carregando e as chamadas falhando por conexão
+    // recusada.
+    //
+    // Com `??`, string vazia continua string vazia: a chamada vira caminho
+    // relativo e a falha aponta para a configuração.
     const cliente = await carregarCliente('');
     await cliente.getMe();
-    expect(ultimaChamada().url).toBe('http://localhost:3000/auth/me');
+    expect(ultimaChamada().url).toBe('/auth/me');
   });
 
   it('ACHADO: barra no fim do env vira barra dupla na URL — não há normalização', async () => {
@@ -285,18 +303,17 @@ describe('resposta 401', () => {
     expect(janela.location.href).toBe('/apis');
   });
 
-  it('ACHADO: 401 no servidor quebra antes de virar Unauthorized', async () => {
-    // `clearToken()` mexe em `localStorage` sem o guarda de `window` que o
-    // `getToken()` tem, e roda ANTES do `if (typeof window !== "undefined")`.
-    // Fora do navegador o erro que chega em quem chamou é o do global ausente,
-    // não o "Unauthorized" que o código pretendia lançar.
+  it('401 fora do navegador lança Unauthorized, não erro de global ausente', async () => {
+    // O `clearToken()` mexia em `localStorage` sem o guarda de `window` que o
+    // `getToken()` tem, e rodava ANTES do `if (typeof window !== "undefined")`.
+    // Durante render no servidor o erro que chegava em quem chamou era
+    // "localStorage is not defined" — sem relação nenhuma com a causa.
     vi.stubGlobal('window', undefined);
     vi.stubGlobal('localStorage', undefined);
     fetchFalso.mockResolvedValue(resposta(401, ''));
     const cliente = await carregarCliente();
 
-    await expect(cliente.getMe()).rejects.toThrow(TypeError);
-    await expect(cliente.getMe()).rejects.not.toThrow('Unauthorized');
+    await expect(cliente.getMe()).rejects.toThrow('Unauthorized');
   });
 });
 
@@ -309,20 +326,20 @@ describe('envelope de erro da API', () => {
     await expect(cliente.createApi('X', 'nao-e-url')).rejects.toThrow('spreadsheetUrl inválida');
   });
 
-  it('ACHADO: code e request_id do envelope são jogados fora', async () => {
-    // Só a `message` sobrevive. O `request_id` é o que liga a tela ao log da
-    // API; hoje ele não chega em lugar nenhum do front, então o usuário não
-    // tem o que informar ao suporte.
+  it('code e request_id do envelope chegam ao front', async () => {
+    // O `request_id` é o que liga a tela ao log da API. Antes só a `message`
+    // sobrevivia, e o usuário não tinha o que informar ao suporte.
     fetchFalso.mockResolvedValue(
       resposta(422, '{"code":"QUOTA_EXCEEDED","message":"Limite atingido","request_id":"req_42"}')
     );
     const cliente = await carregarCliente();
 
     const erro = await erroDe(cliente.listApis());
-    expect(erro).toBeInstanceOf(Error);
+    expect(erro.name).toBe('ApiError');
     expect(erro.message).toBe('Limite atingido');
-    expect(JSON.stringify(erro, Object.getOwnPropertyNames(erro))).not.toContain('req_42');
-    expect(erro.message).not.toContain('QUOTA_EXCEEDED');
+    expect(erro.code).toBe('QUOTA_EXCEEDED');
+    expect(erro.requestId).toBe('req_42');
+    expect(erro.status).toBe(422);
   });
 
   it('sem message no corpo, cai na mensagem genérica com o status', async () => {
@@ -337,16 +354,19 @@ describe('envelope de erro da API', () => {
     await expect(cliente.listApis()).rejects.toThrow('Request failed (503)');
   });
 
-  it('ACHADO: resposta de erro que não é JSON vira SyntaxError e some com o status', async () => {
+  it('resposta de erro que não é JSON vira ApiError com o status e um trecho', async () => {
     // Página HTML de gateway (502/504 da Vercel, do Render ou de um proxy) é o
-    // caso real. O `JSON.parse` roda ANTES do `if (!res.ok)`, então o usuário vê
-    // "Unexpected token '<'" em vez de "Request failed (502)".
+    // caso real. O `JSON.parse` rodava ANTES do `if (!res.ok)`, então o usuário
+    // via "Unexpected token '<'" em vez de saber que o gateway caiu.
     fetchFalso.mockResolvedValue(resposta(502, '<html><body>Bad Gateway</body></html>'));
     const cliente = await carregarCliente();
 
     const erro = await erroDe(cliente.listApis());
-    expect(erro).toBeInstanceOf(SyntaxError);
-    expect(erro.message).not.toContain('502');
+    expect(erro.name).toBe('ApiError');
+    expect(erro.status).toBe(502);
+    expect(erro.code).toBe('INVALID_RESPONSE');
+    expect(erro.message).toContain('502');
+    expect(erro.message).toContain('Bad Gateway');
   });
 });
 

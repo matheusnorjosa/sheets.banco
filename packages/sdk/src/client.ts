@@ -1,4 +1,10 @@
-import { SheetsBancoError, NetworkError } from './errors.js';
+import { SheetsBancoError, NetworkError, InvalidResponseError } from './errors.js';
+
+/** Primeiros caracteres do corpo, para a mensagem de erro dizer o que chegou. */
+function resumir(texto: string, limite = 80): string {
+  const limpo = texto.trim().replace(/\s+/g, ' ');
+  return limpo.length > limite ? `${limpo.slice(0, limite)}…` : limpo;
+}
 import type {
   SheetsBancoConfig,
   ReadOptions,
@@ -59,13 +65,33 @@ export class SheetsBanco {
       );
     }
 
-    const data: any = await res.json();
+    // Lê como texto primeiro. O `res.json()` direto estourava um `SyntaxError`
+    // cru — fora do try, e fora da hierarquia de `SheetsBancoError` — sempre
+    // que a resposta não era JSON: HTML de gateway, página de manutenção,
+    // corpo vazio num 500, 204 sem corpo.
+    const texto = await res.text();
+
+    let data: Record<string, unknown> | null = null;
+    if (texto.trim().length > 0) {
+      try {
+        data = JSON.parse(texto) as Record<string, unknown>;
+      } catch {
+        throw new InvalidResponseError(res.status, resumir(texto), { body: texto });
+      }
+    }
 
     if (!res.ok) {
       throw new SheetsBancoError(
         res.status,
-        data.code ?? 'UNKNOWN_ERROR',
-        data.message ?? `Request failed with status ${res.status}`,
+        (data?.code as string) ?? 'UNKNOWN_ERROR',
+        (data?.message as string) ?? `Request failed with status ${res.status}`,
+        {
+          // O campo que o `docs/error-handling.md` existe para garantir, e que
+          // esta conversão descartava. Fallback no header, que a API também
+          // ecoa, para o caso de a resposta de erro não ter vindo do handler.
+          requestId: (data?.request_id as string) ?? res.headers.get('x-request-id') ?? undefined,
+          body: data,
+        },
       );
     }
 

@@ -18,7 +18,7 @@
  * Cada um explica o que o consumidor recebe hoje.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SheetsBanco, SheetsBancoError, NetworkError } from './index.js';
+import { SheetsBanco, SheetsBancoError, NetworkError, InvalidResponseError } from './index.js';
 
 // ---------------------------------------------------------------------------
 // Instrumentação do fetch
@@ -487,21 +487,17 @@ describe('tradução da resposta de erro da API', () => {
     expect(erro.message).toBe('API not found');
   });
 
-  it('ACHADO: o request_id do envelope é PERDIDO na conversão', async () => {
-    // Este é o ponto mais caro do arquivo. Todo erro da API traz `request_id`
-    // (e o header `X-Request-Id`) justamente para correlacionar o relato do
-    // cliente com o log do servidor — é o que `docs/error-handling.md` promete.
-    // O construtor de `SheetsBancoError` recebe só (status, code, message), e o
-    // `request` nem lê o campo. Quem usa o SDK abre chamado sem o id, e do
-    // outro lado não há como achar a requisição no log.
+  it('o request_id do envelope chega ao consumidor', async () => {
+    // É o que `docs/error-handling.md` promete e o que liga o relato de quem
+    // usa o SDK à linha de log do servidor. Antes o construtor recebia só
+    // (status, code, message) e o campo era descartado: o chamado abria sem o
+    // id e do outro lado não havia como achar a requisição.
     stubJson(ENVELOPE_404, 404);
     const erro = await capturar(() => cliente().read());
-    expect(erro.request_id).toBeUndefined();
-    expect(erro.requestId).toBeUndefined();
-    expect(erro.message).not.toContain('req_abc123');
-    // Nem sobra a resposta crua para o consumidor cavar o id por conta própria:
-    expect(erro.body).toBeUndefined();
-    expect(erro.response).toBeUndefined();
+
+    expect(erro.requestId).toBe('req_abc123');
+    // E o corpo cru fica disponível para o que o tipo não cobre.
+    expect(erro.body).toEqual(ENVELOPE_404);
   });
 
   it('ACHADO: o header X-Request-Id também não é aproveitado', async () => {
@@ -564,51 +560,70 @@ describe('tradução da resposta de erro da API', () => {
     await expect(c.searchOr({ a: '1' })).rejects.toBeInstanceOf(SheetsBancoError);
   });
 
-  it('204 sem corpo é sucesso para o HTTP, mas o SDK estoura no JSON.parse', async () => {
-    // ACHADO relacionado ao de baixo: `res.json()` é chamado antes de qualquer
-    // checagem, inclusive em resposta sem corpo.
+  it('204 sem corpo resolve com null em vez de estourar no parse', async () => {
+    // Antes o `res.json()` era chamado antes de qualquer checagem, inclusive em
+    // resposta sem corpo, e um DELETE bem-sucedido rejeitava com SyntaxError.
     stubFetch(() => new Response(null, { status: 204 }));
-    const erro = await capturar(() => cliente().delete('a', '1'));
-    expect(erro).not.toBeInstanceOf(SheetsBancoError);
-    expect(erro.name).toBe('SyntaxError');
+    await expect(cliente().delete('a', '1')).resolves.toBeNull();
   });
 });
 
-describe('ACHADO: resposta que não é JSON estoura crua no consumidor', () => {
-  // `const data = await res.json()` roda ANTES do `if (!res.ok)` e fora do
-  // try/catch. Qualquer resposta não-JSON — HTML de proxy, página de manutenção
-  // do Render, 502 do gateway, resposta cortada — sai do SDK como `SyntaxError`
-  // do `JSON.parse`, não como `SheetsBancoError`. Quem escreveu
-  // `catch (e) { if (e instanceof SheetsBancoError) ... }` não pega esse caso,
-  // e a mensagem ("Unexpected token '<'") não diz nem o status nem a URL.
+describe('resposta que não é JSON vira erro útil, não SyntaxError cru', () => {
+  // Antes, `const data = await res.json()` rodava ANTES do `if (!res.ok)` e
+  // fora do try/catch. Qualquer resposta não-JSON — HTML de proxy, página de
+  // manutenção do Render, 502 do gateway, corpo cortado — saía do SDK como
+  // `SyntaxError` do `JSON.parse`. Quem escreveu
+  // `catch (e) { if (e instanceof SheetsBancoError) ... }` não pegava o caso, e
+  // a mensagem ("Unexpected token '<'") não dizia nem o status nem o que
+  // chegou.
 
-  it('HTML de proxy em 502 não vira SheetsBancoError', async () => {
+  it('HTML de proxy em 502 vira InvalidResponseError com o status e um trecho', async () => {
     stubTexto('<html><body>502 Bad Gateway</body></html>', 502);
     const erro = await capturar(() => cliente().read());
-    expect(erro).not.toBeInstanceOf(SheetsBancoError);
-    expect(erro).toBeInstanceOf(SyntaxError);
-    // A mensagem não carrega nada que ajude a diagnosticar:
-    expect(erro.message).not.toContain('502');
-    expect(erro.message).not.toContain('api.exemplo.com');
+
+    expect(erro).toBeInstanceOf(InvalidResponseError);
+    // E continua sendo SheetsBancoError: um catch só cobre tudo.
+    expect(erro).toBeInstanceOf(SheetsBancoError);
+    expect(erro.status).toBe(502);
+    expect(erro.code).toBe('INVALID_RESPONSE');
+    expect(erro.message).toContain('502');
+    expect(erro.message).toContain('502 Bad Gateway');
   });
 
-  it('HTML de página de login (302 seguido para uma tela) também estoura', async () => {
+  it('HTML de página de login em 200 também vira erro tratável', async () => {
     stubTexto('<!doctype html><title>Entrar</title>', 200);
     const erro = await capturar(() => cliente().read());
-    expect(erro).toBeInstanceOf(SyntaxError);
+
+    expect(erro).toBeInstanceOf(InvalidResponseError);
+    expect(erro.status).toBe(200);
   });
 
-  it('corpo JSON truncado no meio estoura do mesmo jeito', async () => {
+  it('corpo JSON truncado no meio idem, com o trecho no corpo do erro', async () => {
     stubTexto('[{"a":"1"},{"a"', 200, 'application/json');
     const erro = await capturar(() => cliente().read());
-    expect(erro).toBeInstanceOf(SyntaxError);
+
+    expect(erro).toBeInstanceOf(InvalidResponseError);
+    expect(erro.body).toBe('[{"a":"1"},{"a"');
   });
 
-  it('corpo vazio com status 500 estoura antes de virar erro de servidor', async () => {
+  it('trecho longo é truncado com reticências para não poluir o log', async () => {
+    stubTexto('<html>' + 'x'.repeat(500) + '</html>', 502);
+    const erro = await capturar(() => cliente().read());
+
+    expect(erro.message.length).toBeLessThan(200);
+    expect(erro.message).toContain('…');
+  });
+
+  it('corpo vazio com status 500 vira SheetsBancoError, não erro de parse', async () => {
+    // Corpo vazio não é JSON inválido — é ausência de corpo. O status é que
+    // manda, e o consumidor recebe o erro de servidor que esperava.
     stubTexto('', 500, 'application/json');
     const erro = await capturar(() => cliente().read());
-    expect(erro).not.toBeInstanceOf(SheetsBancoError);
-    expect(erro).toBeInstanceOf(SyntaxError);
+
+    expect(erro).toBeInstanceOf(SheetsBancoError);
+    expect(erro).not.toBeInstanceOf(InvalidResponseError);
+    expect(erro.status).toBe(500);
+    expect(erro.code).toBe('UNKNOWN_ERROR');
   });
 });
 
