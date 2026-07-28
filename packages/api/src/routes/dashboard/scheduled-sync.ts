@@ -52,7 +52,7 @@ function getUserId(request: any): string {
 }
 
 export async function scheduledSyncRoutes(app: FastifyInstance) {
-  app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   app.addHook('onRequest', jwtAuth);
 
   // GET /dashboard/apis/:id/sync — get sync settings

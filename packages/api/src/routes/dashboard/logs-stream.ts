@@ -5,7 +5,7 @@ import { jwtAuth } from '../../middleware/jwt-auth.js';
 import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 
 export async function logsStreamRoutes(app: FastifyInstance) {
-  app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   // `onRequest`, como nos outros seis arquivos de dashboard — e nao
   // `preHandler` na rota, como era antes.
   //

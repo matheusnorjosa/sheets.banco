@@ -437,3 +437,55 @@ describe('POST /auth/google/exchange', () => {
     expect(sumido.json().message).toBe(invalido.json().message);
   });
 });
+
+describe('rate limit cobre as rotas novas', () => {
+  /**
+   * O CodeQL abriu `js/missing-rate-limiting` (alerta #61) sobre o
+   * `/auth/google/exchange`, dizendo que ele "performs authorization, but is
+   * not rate-limited". É falso positivo — mas não havia teste nenhum provando
+   * isso, então a afirmação valia tanto quanto o alerta.
+   *
+   * `authRateLimitOptions()` tem `global: true, max: 10`, e o
+   * `app.register(import('@fastify/rate-limit'))` no topo de `authRoutes` vale
+   * para todo o escopo encapsulado — inclusive rotas registradas depois dele.
+   * Isto exercita o limite de verdade, com o plugin real.
+   */
+  async function dispararVezes(url: string, vezes: number, payload?: unknown) {
+    const respostas = [];
+    for (let i = 0; i < vezes; i++) {
+      respostas.push(
+        await app.inject({ method: 'POST', url, payload: payload ?? {} }),
+      );
+    }
+    return respostas;
+  }
+
+  it('/auth/google/exchange responde 429 depois do 10º pedido no minuto', async () => {
+    const respostas = await dispararVezes('/auth/google/exchange', 12, { code: 'x' });
+    const status = respostas.map((r) => r.statusCode);
+
+    expect(status.filter((s) => s === 429).length).toBeGreaterThan(0);
+    // E os primeiros passaram: senão o teste provaria só que a rota está quebrada.
+    expect(status[0]).not.toBe(429);
+  });
+
+  it('/auth/google/url também é coberto', async () => {
+    const respostas = await dispararVezes('/auth/google/url', 12);
+    expect(respostas.map((r) => r.statusCode).filter((s) => s === 429).length).toBeGreaterThan(0);
+  });
+
+  it('o limite é por IP, com prefixo próprio de auth', async () => {
+    // Contraponto: se a chave fosse global, um cliente derrubaria o login de
+    // todo mundo; se não tivesse prefixo, o balde de auth se misturaria ao das
+    // rotas de dashboard.
+    const daqui = await dispararVezes('/auth/google/exchange', 12, { code: 'x' });
+    expect(daqui.some((r) => r.statusCode === 429)).toBe(true);
+
+    const deOutroIp = await app.inject({
+      method: 'POST', url: '/auth/google/exchange',
+      payload: { code: 'x' },
+      remoteAddress: '198.51.100.9',
+    });
+    expect(deOutroIp.statusCode).not.toBe(429);
+  });
+});

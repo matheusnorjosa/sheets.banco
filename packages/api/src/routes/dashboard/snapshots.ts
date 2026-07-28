@@ -26,7 +26,7 @@ function getUserId(request: any): string {
 }
 
 export async function snapshotRoutes(app: FastifyInstance) {
-  app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   app.addHook('onRequest', jwtAuth);
 
   // POST /dashboard/apis/:id/snapshots — create a snapshot of current data

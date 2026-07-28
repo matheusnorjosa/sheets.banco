@@ -54,7 +54,18 @@ function urlDeConsentimento(state: { mode: 'login' } | { mode: 'connect'; userId
 export async function authRoutes(app: FastifyInstance) {
   // Strict per-IP rate limit applied to every route below — defends
   // login/register/2FA from brute force.
-  app.register(import('@fastify/rate-limit'), authRateLimitOptions() as any);
+  //
+  // O `await` NÃO é enfeite, e a ausência dele deixou este limite morto desde
+  // que foi escrito. Sem ele o `register` só entra na fila: o plugin instala o
+  // hook `onRequest` depois que as rotas deste escopo já foram vinculadas, e o
+  // hook não as alcança. O efeito é silencioso — a chamada existe, o comentário
+  // promete, e passam mil requisições por minuto.
+  //
+  // Foi o CodeQL (`js/missing-rate-limiting`, alerta #61) que apontou, e a
+  // primeira leitura aqui foi tratá-lo como falso positivo. Um teste com o
+  // plugin real mostrou que ele estava certo. Ver `rate-limiter.test.ts`, que
+  // varre os arquivos de rota atrás deste padrão.
+  await app.register(import('@fastify/rate-limit'), authRateLimitOptions() as any);
 
   // POST /auth/register
   app.post('/register', async (request, reply) => {

@@ -24,7 +24,7 @@ function getUserId(request: any): string {
 }
 
 export async function webhookRoutes(app: FastifyInstance) {
-  app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+  await app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
   app.addHook('onRequest', jwtAuth);
 
   // GET /dashboard/apis/:id/webhooks — list webhooks

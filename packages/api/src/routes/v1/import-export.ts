@@ -34,7 +34,7 @@ export async function importExportRoutes(app: FastifyInstance) {
   });
 
   // Per-API rate limiting (same pattern as v1/sheets.ts) — uses sheetApi.rateLimitRpm
-  app.register(import('@fastify/rate-limit'), apiRateLimitOptions() as any);
+  await app.register(import('@fastify/rate-limit'), apiRateLimitOptions() as any);
 
   // Resolve SheetApi
   app.addHook('onRequest', async (request) => {
