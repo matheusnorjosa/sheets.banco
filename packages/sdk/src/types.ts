@@ -18,6 +18,21 @@ export interface SearchOptions extends ReadOptions {
   casesensitive?: boolean;
 }
 
+/** Opções das rotas de escrita (`create`, `update`, `delete`). */
+export interface WriteOptions {
+  /**
+   * Escrever na hora em vez de enfileirar.
+   *
+   * Por padrão a API responde `202 { queued: true, jobId }` e o job roda no
+   * BullMQ — a planilha só muda depois. Com `sync: true` ela escreve durante a
+   * requisição e devolve a contagem (`{ created }` / `{ updated }` /
+   * `{ deleted }`), ao custo de a requisição esperar o Google Sheets.
+   */
+  sync?: boolean;
+}
+
+export type { WriteResponse, MutationResponse, QueuedResponse } from '@sheets-banco/shared';
+
 /**
  * Reexportado de `@sheets-banco/shared` — fonte de verdade única do contrato.
  *
