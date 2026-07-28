@@ -256,6 +256,21 @@ export async function authRoutes(app: FastifyInstance) {
   // Redis para o login funcionar. A defesa é a validade curtíssima somada ao
   // propósito — reapresentar o código depois de um minuto não vale nada, e
   // dentro do minuto ele já foi usado pela aba que o recebeu.
+  //
+  // CodeQL `js/missing-rate-limiting` (alerta #61) aponta este handler como
+  // "performs authorization, but is not rate-limited". É falso positivo — mas
+  // vale registrar COMO isso foi verificado, porque a mesma regra já foi
+  // dispensada três vezes neste repo (#49, #50, #60) e nas três estava certa:
+  // faltava o `await` no registro, e nenhum limite valia.
+  //
+  // Aqui a proteção foi MEDIDA, não deduzida: `app.test.ts` monta o
+  // `buildApp()` inteiro e confere que este endpoint responde 429 no 11º
+  // pedido e que a resposta traz `x-ratelimit-limit: 10`. O CodeQL não segue o
+  // hook `onRequest` que o `@fastify/rate-limit` instala no escopo do plugin.
+  //
+  // Regra para a próxima vez: antes de dispensar esta regra, medir o header
+  // `x-ratelimit-*` na rota. Ler o código não basta — foi assim que passou três
+  // vezes.
   app.post('/google/exchange', async (request, reply) => {
     const { code } = (request.body ?? {}) as { code?: string };
     if (!code) throw new ValidationError('Provide "code".');
