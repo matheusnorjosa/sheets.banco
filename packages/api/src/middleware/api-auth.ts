@@ -16,14 +16,19 @@ const GRACE_PERIOD_MS = 60 * 60 * 1000; // 1 hour
 const LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
 
 /**
- * O envelope de erro da casa, MENOS o `request_id`.
+ * O envelope de erro da casa, sem o `request_id` — que este código não precisa
+ * preencher.
  *
- * O `Omit` não é estilo: é o registro de uma lacuna real. Este middleware
- * responde com `reply.send()` direto, sem passar pelo `setErrorHandler`, e por
- * isso o `request_id` — que `docs/error-handling.md` promete em toda resposta
- * de erro — não sai daqui. São 31 pontos assim espalhados por 10 arquivos.
- * Quando o sweep acontecer, este tipo vira `ApiErrorResponse` puro e o `Omit`
- * some.
+ * Este middleware responde com `reply.send()` direto, sem passar pelo
+ * `setErrorHandler`. Antes, isso significava resposta sem `request_id` e sem
+ * `X-Request-Id`, contrariando `docs/error-handling.md`. Hoje um hook de
+ * `preSerialization` (`registerRequestIdOnErrors`, em `lib/error-handler.ts`)
+ * completa o envelope de qualquer resposta com `error: true`, tenha ela sido
+ * lançada ou enviada direto.
+ *
+ * O `Omit` continua correto e descreve a divisão de responsabilidade: quem
+ * constrói o corpo aqui não conhece o id da requisição; quem o serializa
+ * conhece.
  */
 type AuthErrorBody = Omit<ApiErrorResponse, 'request_id'>;
 

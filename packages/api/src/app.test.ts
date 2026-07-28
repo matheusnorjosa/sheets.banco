@@ -23,9 +23,16 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 
+/** Hoisted para os testes conseguirem controlar a resolução da SheetApi. */
+const sheetApiDb = vi.hoisted(() => ({
+  findFirst: vi.fn(),
+  findUnique: vi.fn(),
+  findMany: vi.fn(),
+}));
+
 vi.mock('./lib/prisma.js', () => ({
   prisma: {
-    sheetApi: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    sheetApi: sheetApiDb,
     user: { findUnique: vi.fn() },
     apiKey: { findMany: vi.fn() },
     usageLog: { findMany: vi.fn() },
@@ -242,6 +249,47 @@ describe('error handler está ativo na aplicação montada', () => {
   it('gera um request_id com prefixo req_ quando o cliente não manda', async () => {
     const r = await app.inject({ method: 'POST', url: '/auth/login', payload: {} });
     expect(r.json().request_id).toMatch(/^req_/);
+  });
+});
+
+describe('TODA resposta de erro carrega request_id', () => {
+  // O `setErrorHandler` só vê o que é LANÇADO. Mas 31 pontos em 10 arquivos
+  // respondem com `reply.status(n).send({ error: true, ... })` direto, e essas
+  // saíam sem `request_id` e sem `X-Request-Id` — contrariando a primeira
+  // linha de `docs/error-handling.md`. Um hook de `preSerialization` completa
+  // o envelope nos dois caminhos.
+
+  it('erro LANÇADO (validação) traz request_id', async () => {
+    const r = await app.inject({ method: 'POST', url: '/auth/login', payload: {} });
+    expect(r.json().request_id).toBeTruthy();
+    expect(r.headers['x-request-id']).toBe(r.json().request_id);
+  });
+
+  it('erro ENVIADO direto pelo reply também traz — este é o que faltava', async () => {
+    // `/api/v1/:apiId` sem credencial cai no `apiAuth`, que responde pelo
+    // `reply` sem lançar. Antes, esta resposta não tinha correlação de log.
+    const api = {
+      id: 'api-1', slug: 'x', userId: 'u1', spreadsheetId: 's1',
+      authEnabled: true, bearerToken: 'tok', bearerTokenHash: null,
+      allowRead: true, corsOrigins: null, ipWhitelist: null, rateLimitRpm: 60,
+    };
+    // O resolver tenta `findUnique` pelo id e `findFirst` pelo slug.
+    sheetApiDb.findUnique.mockResolvedValue(api);
+    sheetApiDb.findFirst.mockResolvedValue(api);
+
+    const r = await app.inject({ method: 'GET', url: '/api/v1/api-1' });
+
+    expect(r.statusCode).toBe(401);
+    expect(r.json().code).toBe('API_UNAUTHORIZED');
+    expect(r.json().request_id).toBeTruthy();
+    expect(r.headers['x-request-id']).toBe(r.json().request_id);
+  });
+
+  it('resposta de SUCESSO não ganha request_id — o hook só mexe em erro', async () => {
+    // Contraponto: sem ele o hook poderia estar poluindo toda resposta.
+    const r = await app.inject({ method: 'GET', url: '/health' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ status: 'ok' });
   });
 });
 

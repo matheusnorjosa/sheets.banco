@@ -340,7 +340,11 @@ describe('preflight OPTIONS', () => {
     });
 
     expect(r.statusCode).toBe(403);
-    expect(r.json()).toEqual({
+    // `toMatchObject`, não `toEqual`: o hook de `preSerialization` acrescenta
+    // `request_id` a toda resposta de erro, inclusive às enviadas direto pelo
+    // `reply` como esta.
+    expect(r.json().request_id).toBeTruthy();
+    expect(r.json()).toMatchObject({
       error: true,
       message: 'Origin not allowed.',
       code: 'CORS_FORBIDDEN',
