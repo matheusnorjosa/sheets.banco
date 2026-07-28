@@ -11,15 +11,25 @@ function CallbackHandler() {
   const { refreshUser } = useAuth();
 
   useEffect(() => {
-    const token = searchParams.get("token");
+    const code = searchParams.get("code");
+    // `?token=` é o formato ANTIGO, em que a API mandava o JWT de sessão de 24h
+    // na URL. Fica aceito por um release porque a API (Render) e este app
+    // (Vercel) sobem em deploys separados a partir do mesmo merge: recusá-lo já
+    // quebraria o login com Google na janela entre os dois. Sai no próximo.
+    const tokenLegado = searchParams.get("token");
     const google = searchParams.get("google");
 
-    if (!token) {
+    if (!code && !tokenLegado) {
       router.replace("/login?google=error");
       return;
     }
 
-    api.setToken(token);
+    let cancelled = false;
+
+    // Troca o código de 60s por uma sessão, ou usa o token legado direto.
+    const obterSessao = code
+      ? api.exchangeGoogleCode(code).then(({ token }) => api.setToken(token))
+      : Promise.resolve(api.setToken(tokenLegado as string));
 
     // Sync the AuthProvider state with the new token BEFORE navigating into
     // the dashboard. The previous code only persisted the token and trusted
@@ -27,8 +37,8 @@ function CallbackHandler() {
     // but the provider lives in the root layout and stays mounted, so the
     // dashboard guard saw user=null and bounced back to /login on the first
     // try. Awaiting refreshUser() makes the first attempt deterministic.
-    let cancelled = false;
-    refreshUser()
+    obterSessao
+      .then(() => refreshUser())
       .then(() => {
         if (!cancelled) router.replace("/apis?google=" + (google || "connected"));
       })

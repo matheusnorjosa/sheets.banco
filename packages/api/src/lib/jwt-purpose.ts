@@ -25,6 +25,17 @@ export const JWT_PURPOSE = {
    * Só vale em `POST /auth/2fa/validate`, que o troca por um de sessão.
    */
   PENDING_2FA: '2fa_pending',
+  /**
+   * Emitido no fim do OAuth do Google e devolvido ao navegador **na URL**
+   * (`/callback?code=`), porque redirect não tem outro canal. Só vale em
+   * `POST /auth/google/exchange`, que o troca por um de sessão.
+   *
+   * Vive 60 segundos. É o que torna aceitável um segredo em URL: o histórico
+   * do navegador e o log de acesso da Vercel guardam aquele endereço para
+   * sempre, mas o que está nele deixa de servir para qualquer coisa um minuto
+   * depois. Antes disto o que ia na URL era o token de sessão de 24h.
+   */
+  OAUTH_EXCHANGE: 'oauth_exchange',
 } as const;
 
 export type JwtPurpose = (typeof JWT_PURPOSE)[keyof typeof JWT_PURPOSE];
@@ -52,7 +63,7 @@ export interface JwtPayload {
  * reabre a falha — o token de 2FA é barrado pelo `pending2fa`, que ele sempre
  * carregou.
  */
-export function ehTokenDeSessao(payload: JwtPayload): boolean {
+export function ehTokenDeSessao(payload: Pick<JwtPayload, 'purpose' | 'pending2fa'>): boolean {
   if (payload.pending2fa === true) return false;
   if (payload.purpose !== undefined && payload.purpose !== JWT_PURPOSE.SESSION) return false;
   return true;

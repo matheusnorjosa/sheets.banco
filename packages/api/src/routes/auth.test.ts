@@ -265,3 +265,175 @@ describe('GET /auth/me', () => {
     expect(r.statusCode).toBe(401);
   });
 });
+
+describe('conectar Google sem pôr o token na URL', () => {
+  it('POST /auth/google/url devolve a URL de consentimento para quem tem sessão', async () => {
+    const r = await app.inject({
+      method: 'POST', url: '/auth/google/url',
+      headers: { authorization: bearerDe(app, { sub: 'u1', email: 'a@ex.com', purpose: 'session' }) },
+    });
+
+    expect(r.statusCode).toBe(200);
+    expect(r.json().url).toContain('accounts.google.com');
+  });
+
+  it('POST /auth/google/url exige sessão', async () => {
+    const r = await app.inject({ method: 'POST', url: '/auth/google/url' });
+    expect(r.statusCode).toBe(401);
+  });
+
+  it('POST /auth/google/url recusa o tempToken do 2FA', async () => {
+    const r = await app.inject({
+      method: 'POST', url: '/auth/google/url',
+      headers: { authorization: bearerDe(app, { sub: 'u1', email: 'a@ex.com', pending2fa: true }) },
+    });
+
+    expect(r.statusCode).toBe(401);
+    expect(r.json().code).toBe('TOKEN_WRONG_PURPOSE');
+  });
+
+  it('a URL não carrega segredo nosso — só o state, que é o id do usuário', async () => {
+    // O ponto do endpoint: o navegador vai para uma URL do Google, e o token de
+    // sessão fica no header desta chamada, fora da barra de endereço.
+    const r = await app.inject({
+      method: 'POST', url: '/auth/google/url',
+      headers: { authorization: bearerDe(app, { sub: 'u1', email: 'a@ex.com', purpose: 'session' }) },
+    });
+
+    expect(r.json().url).not.toContain('eyJ'); // prefixo de JWT em base64url
+  });
+});
+
+describe('GET /auth/google — caminho antigo, mantido por um release', () => {
+  it('sem token redireciona para o consentimento (fluxo de login)', async () => {
+    const r = await app.inject({ method: 'GET', url: '/auth/google' });
+
+    expect(r.statusCode).toBe(302);
+    expect(r.headers.location).toContain('accounts.google.com');
+  });
+
+  it('com token de sessão em ?token= ainda funciona', async () => {
+    // Depreciado, não removido: API (Render) e dashboard (Vercel) sobem em
+    // deploys separados do mesmo merge, e derrubar isto junto com a mudança do
+    // front quebraria "conectar Google" na janela entre os dois.
+    const token = bearerDe(app, { sub: 'u1', email: 'a@ex.com', purpose: 'session' }).slice(7);
+    const r = await app.inject({ method: 'GET', url: `/auth/google?token=${token}` });
+
+    expect(r.statusCode).toBe(302);
+    expect(r.headers.location).toContain('accounts.google.com');
+  });
+
+  it('ACHADO: recusa o tempToken do 2FA em ?token=', async () => {
+    // Este caminho verificava o token com `app.jwt.verify` direto, sem olhar o
+    // propósito. Sem o `ehTokenDeSessao`, quem tivesse só a senha ligava uma
+    // conta Google — e passava a ter o OAuth da vítima — sem digitar o TOTP.
+    const temp = bearerDe(app, { sub: 'u1', email: 'a@ex.com', pending2fa: true }).slice(7);
+    const r = await app.inject({ method: 'GET', url: `/auth/google?token=${temp}` });
+
+    expect(r.statusCode).toBe(401);
+  });
+
+  it('token inválido em ?token= dá 401', async () => {
+    const r = await app.inject({ method: 'GET', url: '/auth/google?token=nao-e-jwt' });
+    expect(r.statusCode).toBe(401);
+  });
+});
+
+describe('POST /auth/google/exchange', () => {
+  function codigoDeTroca(over: Record<string, unknown> = {}, opts?: { expiresIn: string }) {
+    return app.jwt.sign(
+      { sub: 'u1', email: 'a@ex.com', purpose: 'oauth_exchange', ...over },
+      opts ?? { expiresIn: '60s' },
+    );
+  }
+
+  it('troca o código por uma sessão', async () => {
+    usuarioDb.findUnique.mockResolvedValue({
+      id: 'u1', email: 'a@ex.com', name: 'A', googleRefreshToken: 'gcm$abc',
+    });
+
+    const r = await app.inject({
+      method: 'POST', url: '/auth/google/exchange',
+      payload: { code: codigoDeTroca() },
+    });
+
+    expect(r.statusCode).toBe(200);
+    expect(r.json().user.googleConnected).toBe(true);
+
+    const sessao = app.jwt.verify(r.json().token) as Record<string, unknown>;
+    expect(sessao.purpose).toBe('session');
+    expect(sessao.sub).toBe('u1');
+  });
+
+  it('ACHADO: o código de troca NÃO abre rota de sessão sozinho', async () => {
+    // É por isso que ele pode viajar na URL. Se valesse como sessão, teríamos
+    // trocado um JWT de 24h na barra de endereço por um de 60s — melhor, mas
+    // ainda uma credencial exposta.
+    const r = await app.inject({
+      method: 'GET', url: '/auth/me',
+      headers: { authorization: `Bearer ${codigoDeTroca()}` },
+    });
+
+    expect(r.statusCode).toBe(401);
+    expect(r.json().code).toBe('TOKEN_WRONG_PURPOSE');
+  });
+
+  it('recusa um token de SESSÃO apresentado como código', async () => {
+    // O inverso do caso acima: o endpoint de troca não pode ser um jeito de
+    // renovar sessão indefinidamente a partir de uma sessão já existente.
+    const sessao = app.jwt.sign({ sub: 'u1', email: 'a@ex.com', purpose: 'session' });
+
+    const r = await app.inject({
+      method: 'POST', url: '/auth/google/exchange', payload: { code: sessao },
+    });
+
+    expect(r.statusCode).toBe(401);
+    expect(r.json().code).toBe('INVALID_EXCHANGE_CODE');
+  });
+
+  it('recusa código expirado', async () => {
+    const r = await app.inject({
+      method: 'POST', url: '/auth/google/exchange',
+      payload: { code: codigoDeTroca({}, { expiresIn: '-1s' }) },
+    });
+
+    expect(r.statusCode).toBe(401);
+    expect(r.json().code).toBe('INVALID_EXCHANGE_CODE');
+  });
+
+  it('recusa código que não é JWT', async () => {
+    const r = await app.inject({
+      method: 'POST', url: '/auth/google/exchange', payload: { code: 'lixo' },
+    });
+    expect(r.statusCode).toBe(401);
+  });
+
+  it('sem código dá 400', async () => {
+    const r = await app.inject({ method: 'POST', url: '/auth/google/exchange', payload: {} });
+    expect(r.statusCode).toBe(400);
+  });
+
+  it('código válido de usuário que não existe mais dá 401', async () => {
+    usuarioDb.findUnique.mockResolvedValue(null);
+
+    const r = await app.inject({
+      method: 'POST', url: '/auth/google/exchange', payload: { code: codigoDeTroca() },
+    });
+
+    expect(r.statusCode).toBe(401);
+    expect(r.json().code).toBe('INVALID_EXCHANGE_CODE');
+  });
+
+  it('a mensagem é a mesma para código inválido, expirado e usuário sumido', async () => {
+    // Diferenciar aqui contaria a quem tenta adivinhar em que ponto errou.
+    usuarioDb.findUnique.mockResolvedValue(null);
+    const sumido = await app.inject({
+      method: 'POST', url: '/auth/google/exchange', payload: { code: codigoDeTroca() },
+    });
+    const invalido = await app.inject({
+      method: 'POST', url: '/auth/google/exchange', payload: { code: 'lixo' },
+    });
+
+    expect(sumido.json().message).toBe(invalido.json().message);
+  });
+});

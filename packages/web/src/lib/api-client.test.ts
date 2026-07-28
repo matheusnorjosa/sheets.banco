@@ -96,12 +96,19 @@ type Cliente = Awaited<ReturnType<typeof carregarCliente>>;
  * um `.catch()` solto deixaria o teste passar quando o cliente PARASSE de
  * lançar, que é justamente o que se quer detectar.
  */
-async function erroDe(promessa: Promise<unknown>): Promise<Error> {
+/**
+ * O erro que o cliente lança. Tipado aqui em vez de `Error` porque é
+ * justamente `status`/`code`/`requestId` que os testes precisam inspecionar —
+ * com `Error`, cada acesso a esses campos era erro de tipo.
+ */
+type ErroDaApi = Error & { status?: number; code?: string; requestId?: string };
+
+async function erroDe(promessa: Promise<unknown>): Promise<ErroDaApi> {
   return promessa.then(
     () => {
       throw new Error('esperava que a requisição falhasse, mas ela resolveu');
     },
-    (e: unknown) => e as Error
+    (e: unknown) => e as ErroDaApi
   );
 }
 
@@ -732,11 +739,77 @@ describe('cada método bate no verbo e no caminho certos', () => {
       'createApiKey',
       'getUsage',
       'getUsageChart',
+      'googleAuthUrl',
+      'exchangeGoogleCode',
     ]);
 
     const semCobertura = metodosDoCliente.filter(
       (m) => !cobertosNaTabela.has(m) && !cobertosEmBlocoProprio.has(m)
     );
     expect(semCobertura).toEqual([]);
+  });
+});
+
+describe('conectar Google sem o token na URL', () => {
+  it('googleAuthUrl faz POST e manda o token no HEADER', async () => {
+    // O ponto de toda a mudança: a credencial vai no header, não na barra de
+    // endereço. O caminho antigo era
+    // `window.location.href = API + "/auth/google?token=" + jwt`.
+    armazenamento.setItem('token', 'jwt-de-sessao');
+    fetchFalso.mockResolvedValue(resposta(200, '{"url":"https://accounts.google.com/o/oauth2/v2/auth?client_id=x"}'));
+    const cliente = await carregarCliente('https://api.exemplo.com');
+
+    const { url } = await cliente.googleAuthUrl();
+
+    const chamada = ultimaChamada();
+    expect(chamada.url).toBe('https://api.exemplo.com/auth/google/url');
+    expect(chamada.init.method).toBe('POST');
+    expect(chamada.cabecalhos.Authorization).toBe('Bearer jwt-de-sessao');
+    expect(url).toContain('accounts.google.com');
+  });
+
+  it('a URL pedida não contém o token em lugar nenhum', async () => {
+    armazenamento.setItem('token', 'jwt-de-sessao');
+    const cliente = await carregarCliente('https://api.exemplo.com');
+
+    await cliente.googleAuthUrl().catch(() => {});
+
+    expect(ultimaChamada().url).not.toContain('jwt-de-sessao');
+  });
+
+  it('exchangeGoogleCode manda o código no CORPO', async () => {
+    fetchFalso.mockResolvedValue(resposta(200, '{"token":"sessao-nova","user":{"id":"u1"}}'));
+    const cliente = await carregarCliente('https://api.exemplo.com');
+
+    const { token } = await cliente.exchangeGoogleCode('codigo-de-60s');
+
+    const chamada = ultimaChamada();
+    expect(chamada.url).toBe('https://api.exemplo.com/auth/google/exchange');
+    expect(chamada.init.method).toBe('POST');
+    expect(chamada.init.body).toBe(JSON.stringify({ code: 'codigo-de-60s' }));
+    // O código não pode entrar na URL nem aqui.
+    expect(chamada.url).not.toContain('codigo-de-60s');
+    expect(token).toBe('sessao-nova');
+  });
+
+  it('código expirado não deixa sessão pela metade — cai no tratamento de 401', async () => {
+    // Comportamento REAL, e não o que eu supus ao escrever o teste: o cliente
+    // trata TODO 401 no mesmo ramo, antes de montar o `ApiError`. Então um
+    // código expirado não chega como `INVALID_EXCHANGE_CODE` — vira
+    // `Error('Unauthorized')`, apaga o token e manda para `/login`.
+    //
+    // Para este fluxo isso está certo: falhou o login, vai para o login. O que
+    // importa travar é que nenhuma sessão sobra gravada.
+    armazenamento.setItem('token', 'sessao-velha');
+    fetchFalso.mockResolvedValue(
+      resposta(401, '{"code":"INVALID_EXCHANGE_CODE","message":"Invalid or expired code."}')
+    );
+    const cliente = await carregarCliente();
+
+    const erro = await erroDe(cliente.exchangeGoogleCode('expirado'));
+
+    expect(erro.message).toBe('Unauthorized');
+    expect(armazenamento.getItem('token')).toBeNull();
+    expect(janela.location.href).toBe('/login');
   });
 });
