@@ -6,9 +6,19 @@ import { dashboardRateLimitOptions } from '../../middleware/rate-limiter.js';
 
 export async function logsStreamRoutes(app: FastifyInstance) {
   app.register(import('@fastify/rate-limit'), dashboardRateLimitOptions() as any);
+  // `onRequest`, como nos outros seis arquivos de dashboard — e nao
+  // `preHandler` na rota, como era antes.
+  //
+  // O motivo nao e uniformidade: o `@fastify/rate-limit` engancha em
+  // `onRequest`, e o `keyGenerator` de `dashboardRateLimitOptions` le
+  // `request.user.sub`. Com o jwtAuth em `preHandler` — que roda DEPOIS — o
+  // usuario ainda nao existia na hora de gerar a chave, e o balde de 60 rpm
+  // caia para `dashboard:ip:`. Um escritorio inteiro atras de NAT dividia um
+  // balde so.
+  app.addHook('onRequest', jwtAuth);
 
   // GET /dashboard/apis/:id/logs/stream — SSE endpoint for live logs
-  app.get('/:id/logs/stream', { preHandler: [jwtAuth] }, async (request, reply) => {
+  app.get('/:id/logs/stream', async (request, reply) => {
     const { sub } = request.user as { sub: string };
     const { id } = request.params as { id: string };
 

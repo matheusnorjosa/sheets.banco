@@ -142,6 +142,7 @@ describe('initSheetsWriteWorker — configuração da fila', () => {
     expect(ultimoWorker().opts.connection).toEqual({
       host: 'redis.interno',
       port: 6380,
+      username: 'usuario',
       password: 'senha-do-redis',
     });
   });
@@ -156,12 +157,15 @@ describe('initSheetsWriteWorker — configuração da fila', () => {
     expect(ultimoWorker().opts.connection.password).toBeUndefined();
   });
 
-  it('ignora o usuário da URL — só host, porta e senha entram na conexão', () => {
+  it('preserva o usuário da URL — Redis 6+ com ACL autentica por usuário', () => {
+    // Descartá-lo autenticava como `default`, que pode não ter as permissões
+    // da fila.
     iniciar(URL_REDIS);
     expect(Object.keys(ultimoWorker().opts.connection).sort()).toEqual([
       'host',
       'password',
       'port',
+      'username',
     ]);
   });
 

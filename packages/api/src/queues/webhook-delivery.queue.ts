@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import { buildJobOptions } from '../lib/queue-options.js';
+import { conexaoRedisDe } from '../lib/redis-connection.js';
 
 export interface WebhookDeliveryJobData {
   subscriptionId: string;
@@ -22,13 +23,8 @@ export interface WebhookDeliveryJobData {
 let queue: Queue<WebhookDeliveryJobData> | null = null;
 
 export function initWebhookDeliveryQueue(redisUrl: string): Queue<WebhookDeliveryJobData> {
-  const url = new URL(redisUrl);
   queue = new Queue<WebhookDeliveryJobData>('webhook-delivery', {
-    connection: {
-      host: url.hostname,
-      port: Number(url.port) || 6379,
-      password: url.password || undefined,
-    },
+    connection: conexaoRedisDe(redisUrl),
     // Longer backoff (10s base → ~310s total) — third-party webhook targets
     // are commonly down for >1min during their own incidents; aggressive
     // retries just amplify the spike.

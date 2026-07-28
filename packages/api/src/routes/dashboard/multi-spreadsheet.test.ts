@@ -304,7 +304,9 @@ describe('POST /dashboard/apis/:id/spreadsheets — acesso e duplicata', () => {
     expect(r.json().message).toBe(
       'Could not access the spreadsheet. Make sure it is shared with your Google account.',
     );
-    expect(additionalSheetDb.findUnique).not.toHaveBeenCalled();
+    // A checagem de duplicata acontece ANTES do acesso ao Google, então ela
+    // já rodou quando chegamos aqui — o que não pode ter acontecido é a
+    // gravação.
     expect(additionalSheetDb.create).not.toHaveBeenCalled();
   });
 
@@ -338,11 +340,10 @@ describe('POST /dashboard/apis/:id/spreadsheets — acesso e duplicata', () => {
     });
   });
 
-  it('ORDEM: valida no Google ANTES de checar duplicata — re-adicionar gasta quota', async () => {
-    // Comportamento atual, travado de propósito: mesmo quando a planilha já
-    // está vinculada (resposta 400 garantida), a chamada ao Google acontece.
-    // Inverter as duas checagens economizaria uma round-trip por tentativa
-    // repetida — mas é mudança de comportamento, não deste teste.
+  it('ORDEM: checa duplicata ANTES de gastar cota do Google', async () => {
+    // Antes era o inverso: mesmo com a planilha já vinculada (400 garantido),
+    // a chamada ao Google acontecia. Um cliente com retry em cima de planilha
+    // repetida queimava cota da Sheets API para sempre receber o mesmo erro.
     const ordem: string[] = [];
     sheetsService.getColumnNames.mockImplementation(async () => {
       ordem.push('getColumnNames');
@@ -360,7 +361,20 @@ describe('POST /dashboard/apis/:id/spreadsheets — acesso e duplicata', () => {
     });
 
     expect(r.statusCode).toBe(400);
-    expect(ordem).toEqual(['getColumnNames', 'findUnique']);
+    expect(ordem).toEqual(['findUnique']);
+    expect(sheetsService.getColumnNames).not.toHaveBeenCalled();
+  });
+
+  it('planilha NOVA ainda valida o acesso no Google', async () => {
+    // Contraponto: inverter a ordem não podia virar "nunca valida".
+    additionalSheetDb.findUnique.mockResolvedValue(null);
+
+    await app.inject({
+      method: 'POST',
+      url: '/dashboard/apis/api-1/spreadsheets',
+      payload: { spreadsheetUrl: URL_COMPLETA, label: 'Extra' },
+    });
+
     expect(sheetsService.getColumnNames).toHaveBeenCalledTimes(1);
   });
 });

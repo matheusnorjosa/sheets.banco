@@ -51,7 +51,8 @@ type Handler = (request: FastifyRequest, reply: FastifyReply) => Promise<unknown
 
 interface RotaCapturada {
   url: string;
-  opcoes: { preHandler?: unknown[] };
+  /** Os `addHook` registrados pelo plugin — é onde o jwtAuth vive hoje. */
+  opcoes: { ganchos: Array<[string, unknown]> };
   handler: Handler;
 }
 
@@ -62,10 +63,16 @@ interface RotaCapturada {
  */
 async function capturarRota(): Promise<RotaCapturada> {
   let capturada: RotaCapturada | undefined;
+  const ganchos: Array<[string, unknown]> = [];
   const appFalso = {
     register: vi.fn(),
-    get: vi.fn((url: string, opcoes: { preHandler?: unknown[] }, handler: Handler) => {
-      capturada = { url, opcoes, handler };
+    addHook: vi.fn((evento: string, gancho: unknown) => {
+      ganchos.push([evento, gancho]);
+    }),
+    // A rota deixou de receber `{ preHandler: [jwtAuth] }`: o jwtAuth virou
+    // hook `onRequest` do plugin, como nos outros seis arquivos de dashboard.
+    get: vi.fn((url: string, handler: Handler) => {
+      capturada = { url, opcoes: { ganchos }, handler };
     }),
   } as unknown as FastifyInstance;
 
@@ -107,16 +114,17 @@ function logEm(iso: string) {
 }
 
 describe('registro da rota', () => {
-  it('expõe GET /:id/logs/stream com jwtAuth como preHandler DA ROTA (não hook do plugin)', async () => {
-    // Assimetria proposital em relação aos outros arquivos de dashboard, que
-    // usam `app.addHook('onRequest', jwtAuth)` e portanto protegem tudo que for
-    // registrado no escopo. Aqui a proteção está presa a esta rota: uma rota
-    // nova adicionada neste plugin nasceria PÚBLICA se quem escrever esquecer
-    // de repetir o `preHandler`.
+  it('expõe GET /:id/logs/stream com jwtAuth como hook onRequest do plugin', async () => {
+    // Antes o jwtAuth era `preHandler` DA ROTA, diferente dos outros seis
+    // arquivos de dashboard. Duas consequências: uma rota nova neste plugin
+    // nasceria PÚBLICA se quem escrevesse esquecesse de repetir o preHandler;
+    // e o `@fastify/rate-limit` engancha em `onRequest`, então `request.user`
+    // ainda não existia na hora de gerar a chave e o balde de 60 rpm caía para
+    // `dashboard:ip:` — um escritório inteiro atrás de NAT dividia um balde só.
     const { url, opcoes } = await capturarRota();
 
     expect(url).toBe('/:id/logs/stream');
-    expect(opcoes.preHandler).toEqual([jwtAuth]);
+    expect(opcoes.ganchos).toEqual([['onRequest', jwtAuth]]);
   });
 });
 
