@@ -395,3 +395,54 @@ describe('log de requisição não grava segredo da query', () => {
     expect(JSON.stringify(linhas)).not.toContain('segredo');
   });
 });
+
+describe('rate limit na aplicação montada de verdade', () => {
+  /**
+   * O teste de `rate-limiter.test.ts` prova o padrão; o de `auth.test.ts` prova
+   * a rota sob `montarApp`. Este prova o que de fato sobe: `buildApp()`, com os
+   * ~12 plugins de rota registrados na ordem real.
+   *
+   * Existe porque a regra `js/missing-rate-limiting` do CodeQL já foi dispensada
+   * como falso positivo TRÊS vezes neste repo (alertas #49, #50 e #60) — e as
+   * três vezes ela estava certa, porque faltava o `await` no registro. Antes de
+   * dispensar uma quarta, a proteção precisa ser demonstrada no artefato que
+   * roda em produção, não num app de teste montado à mão.
+   */
+  it('/auth/google/exchange devolve 429 depois do 10º pedido', async () => {
+    const status: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/auth/google/exchange',
+        payload: { code: 'x' },
+        remoteAddress: '203.0.113.77',
+      });
+      status.push(r.statusCode);
+    }
+
+    expect(status[0]).not.toBe(429); // os primeiros passam
+    expect(status.at(-1)).toBe(429); // e o limite morde
+  });
+
+  it('ACHADO EM ABERTO: /api/v1/* continua SEM limite, ao contrário de /auth/*', async () => {
+    // Este teste trava um defeito, não uma garantia. Ele passa enquanto o
+    // problema existir, e quebra de propósito quando alguém consertar — é o
+    // sinal para trocar a asserção por `toBeDefined()`.
+    //
+    // O contraste é medido no mesmo app: `/auth/*` responde com
+    // `x-ratelimit-limit`, `/api/v1/*` não responde com header nenhum. Ou seja,
+    // o plugin não está ativo naquele escopo, mesmo com o `await` corrigido.
+    //
+    // Importa porque `/api/v1/*` é justamente a rota que os Apps Script de
+    // produção consomem, e é onde o `rateLimitRpm` por SheetApi deveria valer.
+    const v1 = await app.inject({
+      method: 'GET', url: '/api/v1/inexistente', remoteAddress: '203.0.113.78',
+    });
+    const auth = await app.inject({
+      method: 'POST', url: '/auth/login', payload: {}, remoteAddress: '203.0.113.79',
+    });
+
+    expect(auth.headers['x-ratelimit-limit']).toBeDefined();
+    expect(v1.headers['x-ratelimit-limit']).toBeUndefined();
+  });
+});

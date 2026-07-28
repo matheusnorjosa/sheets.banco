@@ -21,6 +21,26 @@ export async function registerRateLimiter(app: FastifyInstance) {
  * Per-route rate limit config generator.
  * Use as route-level config: { config: { rateLimit: apiRateLimitOptions() } }
  */
+/**
+ * ⚠️ EM ABERTO: este limite NÃO está valendo em `/api/v1/*`.
+ *
+ * Medido no app real (`app.test.ts`): resposta de `/auth/*` sai com
+ * `x-ratelimit-limit: 10`; resposta de `/api/v1/*` sai **sem nenhum header
+ * `x-ratelimit-*`**, mesmo depois de corrigido o `await` que faltava no
+ * registro. A causa ainda não foi identificada — testei em isolamento o
+ * registro raiz com `global: false` + filho, três plugins irmãos sob o mesmo
+ * prefixo, `max` como função e `global: true` explícito aqui, e **todos
+ * funcionam fora do app**. Algo específico da montagem real derruba.
+ *
+ * Não é hipotético: `/api/v1/*` é a rota que os Apps Script de produção
+ * consomem, e o `rateLimitRpm` configurado por SheetApi não tem efeito.
+ *
+ * `routes/v1/schema.ts` é um caso à parte e inequívoco: não registra limite
+ * nenhum, então `/schema`, `/openapi.json` e `/postman.json` nunca tiveram.
+ *
+ * O header `x-ratelimit-*` é o jeito mais confiável de checar se o limite está
+ * ligado numa rota — mais que ler o código, como esta seção demonstra.
+ */
 export function apiRateLimitOptions() {
   return {
     max: (request: FastifyRequest) => request.sheetApi?.rateLimitRpm ?? 60,
