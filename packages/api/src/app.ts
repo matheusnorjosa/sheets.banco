@@ -5,7 +5,7 @@ import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import rawBody from 'fastify-raw-body';
 import { env } from './config/env.js';
-import { redactPaths } from './lib/logger.js';
+import { redactPaths, serializadoresDeLog } from './lib/logger.js';
 import {
   registerErrorHandler,
   registerNotFoundHandler,
@@ -46,7 +46,15 @@ import { schemaRoutes } from './routes/v1/schema.js';
  */
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: { level: env.LOG_LEVEL, redact: { paths: redactPaths, censor: '[REDACTED]' } },
+    // `serializers` sobrescreve o `req` padrão do Fastify, que registrava a URL
+    // com a query inteira — inclusive `?token=<JWT>` em `/auth/google`. O
+    // `redact` não alcançava isso: ele redige campo de objeto, e a query é
+    // pedaço de string. Ver `lib/logger.ts`.
+    logger: {
+      level: env.LOG_LEVEL,
+      redact: { paths: redactPaths, censor: '[REDACTED]' },
+      serializers: serializadoresDeLog,
+    },
     bodyLimit: env.BODY_LIMIT,
     trustProxy: true,
     // Ecoa `X-Request-Id` para o suporte correlacionar log e relato de cliente.
