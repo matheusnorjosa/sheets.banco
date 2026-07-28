@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma.js';
 import { findApiKeyByPlaintext } from '../lib/api-key-lookup.js';
+import type { ApiErrorResponse } from '@sheets-banco/shared';
 
 const GRACE_PERIOD_MS = 60 * 60 * 1000; // 1 hour
 
@@ -14,12 +15,17 @@ const GRACE_PERIOD_MS = 60 * 60 * 1000; // 1 hour
  */
 const LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
 
-interface AuthErrorBody {
-  error: true;
-  message: string;
-  code: string;
-  statusCode: number;
-}
+/**
+ * O envelope de erro da casa, MENOS o `request_id`.
+ *
+ * O `Omit` não é estilo: é o registro de uma lacuna real. Este middleware
+ * responde com `reply.send()` direto, sem passar pelo `setErrorHandler`, e por
+ * isso o `request_id` — que `docs/error-handling.md` promete em toda resposta
+ * de erro — não sai daqui. São 31 pontos assim espalhados por 10 arquivos.
+ * Quando o sweep acontecer, este tipo vira `ApiErrorResponse` puro e o `Omit`
+ * some.
+ */
+type AuthErrorBody = Omit<ApiErrorResponse, 'request_id'>;
 
 function authError(statusCode: number, code: string, message: string): AuthErrorBody {
   return { error: true, message, code, statusCode };

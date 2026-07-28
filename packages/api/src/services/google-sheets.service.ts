@@ -46,9 +46,20 @@ google.options({ headers: { 'x-goog-api-client': GOOGLE_API_CLIENT_HEADER } });
 
 export type { SheetWithType };
 
-export interface SheetRow {
-  [key: string]: string;
-}
+/**
+ * Re-exportado de `@sheets-banco/shared` para não quebrar os ~20 arquivos que
+ * já importam `SheetRow` daqui.
+ *
+ * Antes havia uma cópia byte a byte da definição neste arquivo. O problema não
+ * era a duplicação em si — era que as cópias já tinham divergido: a do SDK
+ * declarava `string | number`. Uma fonte de verdade só resolve isso se todo
+ * mundo importar dela.
+ *
+ * `import type` de propósito: o pacote `shared` é type-only e a importação
+ * some na compilação, então nada disto cria dependência em tempo de execução.
+ */
+export type { SheetRow } from '@sheets-banco/shared';
+import type { SheetRow } from '@sheets-banco/shared';
 
 async function getSheetsClient(userId: string): Promise<sheets_v4.Sheets> {
   const oauth2Client = await getOAuthClient(userId);
