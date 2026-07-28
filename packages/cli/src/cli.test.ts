@@ -39,6 +39,8 @@ const fsFalso = vi.hoisted(() => ({
   arquivos: new Map<string, string>(),
   diretorios: new Set<string>(),
   chamadasMkdir: [] as Array<{ caminho: string; opcoes: unknown }>,
+  /** Registra as OPÇÕES do write — é onde o `mode: 0o600` do token aparece. */
+  chamadasWrite: [] as Array<{ caminho: string; opcoes: unknown }>,
 }));
 
 vi.mock('node:os', () => {
@@ -55,7 +57,8 @@ vi.mock('node:fs', () => {
       if (conteudo === undefined) throw new Error(`ENOENT: ${String(p)}`);
       return conteudo;
     },
-    writeFileSync: (p: string, c: string) => {
+    writeFileSync: (p: string, c: string, opcoes?: unknown) => {
+      fsFalso.chamadasWrite.push({ caminho: String(p), opcoes });
       fsFalso.arquivos.set(String(p), String(c));
     },
     mkdirSync: (p: string, opcoes: unknown) => {
@@ -77,14 +80,14 @@ const capturado = vi.hoisted(() => ({
 vi.mock('commander', async (importOriginal) => {
   const original = await importOriginal<typeof import('commander')>();
   class ComandoQueGuardaAPromessa extends original.Command {
-    override parse(argv?: readonly string[], opcoes?: unknown) {
-      // `parseAsync` é o mesmo caminho de `parse`, só que devolvendo a cadeia
-      // de promessas em vez de descartá-la. Ver ACHADO "parse() vs parseAsync".
-      capturado.promessa = this.parseAsync(
-        argv as string[] | undefined,
-        opcoes as never,
-      );
-      return this;
+    // O `cli.ts` já chama `parseAsync` (antes chamava `parse`, que descartava
+    // a promessa — ver o commit que corrigiu isso). Este override existe só
+    // para o harness ter uma alça na cadeia e conseguir esperar o comando
+    // terminar antes de inspecionar a saída.
+    override parseAsync(argv?: readonly string[], opcoes?: unknown) {
+      const promessa = super.parseAsync(argv as string[] | undefined, opcoes as never);
+      capturado.promessa = promessa;
+      return promessa;
     }
   }
   return { ...original, Command: ComandoQueGuardaAPromessa };
@@ -111,6 +114,7 @@ beforeEach(() => {
   fsFalso.arquivos.clear();
   fsFalso.diretorios.clear();
   fsFalso.chamadasMkdir.length = 0;
+  fsFalso.chamadasWrite.length = 0;
   stdout = [];
   stderr = [];
 
@@ -148,14 +152,29 @@ interface Resultado {
 
 /** Executa o CLI de ponta a ponta com os argumentos dados. */
 async function rodar(...args: string[]): Promise<Resultado> {
-  capturado.promessa = undefined;
+  // A anotação evita que o TS estreite a propriedade para `undefined` a partir
+  // desta atribuição: ele não enxerga que a importação dinâmica lá embaixo a
+  // reatribui, e sem isso `capturado.promessa?.catch(...)` vira erro de tipo.
+  capturado.promessa = undefined as Promise<unknown> | undefined;
   const argvOriginal = process.argv;
   process.argv = ['node', 'sheets-banco', ...args];
   vi.resetModules();
   let saida: number | undefined;
   try {
     await import('./cli.js');
-    await capturado.promessa;
+    // A promessa capturada é a do `parseAsync` CRU. O `cli.ts` atacha um
+    // `.catch()` nela, e é esse catch que transforma rejeição em mensagem e
+    // código de saída. Se o harness apenas `await`asse a promessa crua, a
+    // rejeição estouraria aqui ANTES de o tratamento do CLI rodar — e o teste
+    // mediria o erro em vez do comportamento.
+    //
+    // A sentinela de `process.exit` é a exceção: ela precisa chegar até aqui
+    // para virar `saida`.
+    await capturado.promessa?.catch((e: unknown) => {
+      if (e instanceof SaidaDoProcesso) throw e;
+    });
+    // Uma volta na fila de microtarefas para o `.catch()` do `cli.ts` rodar.
+    await Promise.resolve();
   } catch (e) {
     if (!(e instanceof SaidaDoProcesso)) throw e;
     saida = e.codigo;
@@ -299,8 +318,17 @@ describe('gravação da configuração', () => {
   it('cria ~/.sheets-banco com recursive quando o diretório não existe', async () => {
     await rodar('init');
     expect(fsFalso.chamadasMkdir).toEqual([
-      { caminho: CONFIG_DIR, opcoes: { recursive: true } },
+      // `mode: 0o700` não é enfeite: este diretório guarda o arquivo com o
+      // Bearer token. Sem ele, em máquina multiusuário ou container
+      // compartilhado, qualquer usuário local lista o conteúdo.
+      { caminho: CONFIG_DIR, opcoes: { recursive: true, mode: 0o700 } },
     ]);
+  });
+
+  it('grava o config com mode 0600 — o arquivo tem o Bearer token', async () => {
+    await rodar('init');
+    const gravacao = fsFalso.chamadasWrite.find((c) => c.caminho === CONFIG_FILE);
+    expect(gravacao?.opcoes).toEqual({ mode: 0o600 });
   });
 
   it('não recria o diretório quando ele já existe', async () => {
@@ -670,12 +698,47 @@ describe('comando export', () => {
     expect(fsFalso.arquivos.has('dados.csv')).toBe(false);
   });
 
-  it('ACHADO: erro sem campo message imprime "Error: undefined"', async () => {
-    // `apiFetch` tem o fallback `|| "Request failed"`; `export` não tem.
+  it('erro sem campo message cai em texto útil, não "Error: undefined"', async () => {
+    // Antes, o `export` imprimia literalmente `Error: undefined` quando o corpo
+    // não trazia `message` — o `apiFetch` tinha fallback, o `export` não.
+    // Agora os três caminhos passam pelo mesmo `mensagemDeErro`, que cai no
+    // status quando não há mensagem.
     programarFetch(resposta({ ok: false, status: 502, json: {} }));
     const r = await rodar('export', 'api_1');
+
     expect(r.saida).toBe(1);
-    expect(r.stderr.join('\n')).toContain('Error: undefined');
+    expect(r.stderr.join('\n')).not.toContain('undefined');
+    expect(r.stderr.join('\n')).toContain('502');
+  });
+
+  it('o request_id do erro aparece na mensagem — é o que o suporte precisa', async () => {
+    programarFetch(
+      resposta({ ok: false, status: 422, json: { message: 'Limite atingido', request_id: 'req_77' } }),
+    );
+    const r = await rodar('export', 'api_1');
+
+    expect(r.stderr.join('\n')).toContain('Limite atingido');
+    expect(r.stderr.join('\n')).toContain('req_77');
+  });
+
+  it('erro com corpo VAZIO cai na mensagem com status, sem estourar no parse', async () => {
+    // Corpo vazio não é JSON inválido — é ausência de corpo. 502 de gateway e
+    // 503 de manutenção costumam vir assim.
+    programarFetch(resposta({ ok: false, status: 503, texto: '' }));
+    const r = await rodar('export', 'api_1');
+
+    expect(r.saida).toBe(1);
+    expect(r.texto).toContain('503');
+    expect(r.texto).not.toContain('undefined');
+  });
+
+  it('erro em HTML de proxy não vira "Unexpected token" — traz status e trecho', async () => {
+    programarFetch(resposta({ ok: false, status: 502, texto: '<html>Bad Gateway</html>' }));
+    const r = await rodar('export', 'api_1');
+
+    expect(r.saida).toBe(1);
+    expect(r.stderr.join('\n')).not.toContain('Unexpected token');
+    expect(r.stderr.join('\n')).toContain('502');
   });
 
   it('ACHADO: o api-id entra cru na URL, sem encodeURIComponent', async () => {
@@ -850,20 +913,35 @@ describe('código de saída', () => {
     }
   });
 
-  it('ACHADO: API fora do ar não vira mensagem — a rejeição escapa do handler', async () => {
+  it('API fora do ar vira mensagem e código 1, não unhandledRejection', async () => {
     // Cenário banal: o default é http://localhost:3000 e a API não está
-    // rodando. Não há try/catch em volta do `fetch`, e `program.parse()`
-    // DESCARTA a promessa do handler async (commander só devolve a cadeia em
-    // `parseAsync`). Resultado em produção: unhandledRejection com stack trace
-    // em vez de "Error: ...", e sem o `process.exit(1)` dos outros erros.
-    //
-    // Aqui a rejeição é observável porque o harness guardou a promessa; sem
-    // isso o teste passaria "verde" com o erro sumindo em background.
+    // rodando. Antes, `program.parse()` DESCARTAVA a promessa do handler async
+    // (o commander só devolve a cadeia em `parseAsync`), então a rejeição
+    // virava unhandledRejection: stack trace cru, sem mensagem e sem código de
+    // saída. Hoje o `.catch()` de topo trata.
     vi.mocked(globalThis.fetch).mockReset();
     vi.mocked(globalThis.fetch).mockRejectedValue(
       new Error('connect ECONNREFUSED 127.0.0.1:3000'),
     );
-    await expect(rodar('apis', 'list')).rejects.toThrow(/ECONNREFUSED/);
-    expect(process.exit).not.toHaveBeenCalled();
+
+    const r = await rodar('apis', 'list');
+
+    expect(r.texto).toContain('ECONNREFUSED');
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0; // não contamina o código de saída do próprio vitest
+  });
+
+  it('rejeição que NÃO é Error também vira mensagem legível', async () => {
+    // O `String(err)` do ternário. Biblioteca que rejeita com string ou objeto
+    // solto é comum o bastante para o CLI não imprimir "[object Object]" sem
+    // contexto — ou, pior, quebrar ao ler `.message` de um não-Error.
+    vi.mocked(globalThis.fetch).mockReset();
+    vi.mocked(globalThis.fetch).mockRejectedValue('falha crua sem Error');
+
+    const r = await rodar('apis', 'list');
+
+    expect(r.texto).toContain('falha crua sem Error');
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
   });
 });

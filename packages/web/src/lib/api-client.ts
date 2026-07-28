@@ -1,4 +1,36 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+/**
+ * `??`, não `||`.
+ *
+ * Com `||`, uma `NEXT_PUBLIC_API_URL` declarada-mas-VAZIA na Vercel (fácil de
+ * acontecer ao criar a variável e esquecer o valor) caía no fallback e fazia o
+ * dashboard de **produção** apontar para o `localhost` de quem abrisse o
+ * navegador. Em silêncio: a tela carrega, as chamadas falham por conexão
+ * recusada, e nada indica a causa.
+ *
+ * Com `??` só `undefined` cai no fallback — string vazia continua string
+ * vazia, as chamadas viram caminho relativo e a falha aponta para a
+ * configuração.
+ */
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+
+/**
+ * Erro que o dashboard lança quando a API responde com falha.
+ *
+ * Antes era `new Error(message)`: `code` e `request_id` do envelope eram
+ * descartados. O `request_id` é justamente o que liga a tela ao log da API —
+ * sem ele, um relato de tela não tem como ser rastreado do outro lado.
+ */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly requestId?: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
 
 class ApiClient {
   private getToken(): string | null {
@@ -11,6 +43,11 @@ class ApiClient {
   }
 
   clearToken() {
+    // Mesma guarda do `getToken`. Sem ela, um 401 durante render no servidor
+    // estourava aqui ("localStorage is not defined") e o erro que aparecia não
+    // tinha relação com a causa — o `setToken` tem o mesmo risco, mas só é
+    // chamado a partir de evento do usuário.
+    if (typeof window === "undefined") return;
     localStorage.removeItem("token");
   }
 
@@ -46,10 +83,35 @@ class ApiClient {
     }
 
     const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
+
+    // O `JSON.parse` solto estourava um `SyntaxError` sempre que a resposta não
+    // era JSON: HTML de gateway (502/504 da Vercel, do Render ou de proxy
+    // corporativo), página de manutenção, corpo truncado. A tela mostrava
+    // "Unexpected token <", que não diz nem o status nem o que aconteceu.
+    let data: { message?: string; code?: string; request_id?: string } | null = null;
+    if (text.trim().length > 0) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        const trecho = text.trim().replace(/\s+/g, " ").slice(0, 80);
+        throw new ApiError(
+          res.status,
+          "INVALID_RESPONSE",
+          `A resposta (HTTP ${res.status}) não é JSON válido: ${trecho}`,
+        );
+      }
+    }
 
     if (!res.ok) {
-      throw new Error((data && data.message) || `Request failed (${res.status})`);
+      throw new ApiError(
+        res.status,
+        data?.code ?? "UNKNOWN_ERROR",
+        data?.message ?? `Request failed (${res.status})`,
+        // Fallback no header porque nem toda resposta de erro da API passa pelo
+        // error handler — há 31 pontos que respondem direto, sem `request_id`
+        // no corpo, mas o header sai do mesmo jeito quando o handler atua.
+        data?.request_id ?? res.headers.get("x-request-id") ?? undefined,
+      );
     }
 
     return data as T;

@@ -40,42 +40,50 @@ describe('SheetsBancoError', () => {
     }).toThrow(SheetsBancoError);
   });
 
-  it('ACHADO: status e code são públicos e MUTÁVEIS', () => {
-    // Declarados como `public status` / `public code`, sem `readonly`. Nada
-    // impede um middleware do consumidor de reescrever o código do erro depois
-    // de capturá-lo — e aí o log conta outra história.
+  it('status e code são readonly — o TypeScript recusa reescrevê-los', () => {
+    // Antes eram `public status` / `public code` sem `readonly`, e nada impedia
+    // um middleware do consumidor de reescrever o código do erro depois de
+    // capturá-lo — e aí o log contaria outra história.
+    //
+    // A garantia é de compilação, então o teste dela é o `@ts-expect-error`:
+    // se alguém tirar o `readonly`, a diretiva vira erro ("unused
+    // ts-expect-error") e o typecheck quebra.
     const e = new SheetsBancoError(404, 'API_NOT_FOUND', 'x');
+    // @ts-expect-error readonly
     e.code = 'OUTRA_COISA';
+    // @ts-expect-error readonly
     e.status = 200;
-    expect(e.code).toBe('OUTRA_COISA');
-    expect(e.status).toBe(200);
   });
 
-  it('ACHADO: não há campo para request_id nem para o corpo da resposta', () => {
-    // O construtor tem três parâmetros. O envelope da API tem cinco campos
-    // (`error`, `message`, `code`, `statusCode`, `request_id`) — os dois que
-    // faltam são justamente os que servem para correlacionar com o log do
-    // servidor. Ver o ACHADO correspondente em `client.test.ts`.
-    expect(SheetsBancoError.length).toBe(3);
-    const e = new SheetsBancoError(404, 'API_NOT_FOUND', 'x');
-    // `name` aparece porque o construtor faz `this.name = ...`, o que cria uma
-    // propriedade própria e enumerável em cima da do protótipo de `Error`.
-    expect(Object.keys(e).sort()).toEqual(['code', 'name', 'status']);
+  it('carrega request_id e o corpo cru da resposta', () => {
+    // O envelope da API tem cinco campos e o `request_id` é o que correlaciona
+    // o problema do consumidor com a linha de log do servidor. Antes o
+    // construtor recebia só (status, code, message) e o id era descartado.
+    const e = new SheetsBancoError(404, 'API_NOT_FOUND', 'x', {
+      requestId: 'req_abc123',
+      body: { error: true, code: 'API_NOT_FOUND' },
+    });
+
+    expect(e.requestId).toBe('req_abc123');
+    expect(e.body).toEqual({ error: true, code: 'API_NOT_FOUND' });
   });
 
-  it('ACHADO: JSON.stringify do erro leva status e code, mas PERDE a mensagem', () => {
-    // `message` fica no protótipo de `Error` e não é enumerável, então some no
-    // stringify — e é exatamente isso que muitos loggers fazem com um objeto de
-    // erro. Sobram `status`, `code` e `name` (campos próprios). Ou seja: o log
-    // do consumidor registra "API_NOT_FOUND" sem dizer o que não foi encontrado.
-    const e = new SheetsBancoError(404, 'API_NOT_FOUND', 'API not found');
+  it('JSON.stringify do erro leva a mensagem — é o que os loggers fazem', () => {
+    // `message` mora no protótipo de `Error` e não é enumerável, então sumia no
+    // stringify: o log do consumidor registrava "API_NOT_FOUND" sem dizer o que
+    // não foi encontrado. O `toJSON()` da classe resolve.
+    const e = new SheetsBancoError(404, 'API_NOT_FOUND', 'API not found', {
+      requestId: 'req_xyz',
+    });
     const serializado = JSON.parse(JSON.stringify(e));
+
     expect(serializado).toEqual({
+      name: 'SheetsBancoError',
+      message: 'API not found',
       status: 404,
       code: 'API_NOT_FOUND',
-      name: 'SheetsBancoError',
+      requestId: 'req_xyz',
     });
-    expect(serializado.message).toBeUndefined();
     // `toString()` continua funcionando e é o caminho seguro para log:
     expect(String(e)).toBe('SheetsBancoError: API not found');
   });
