@@ -202,6 +202,36 @@ describe('POST /auth/login', () => {
 
     const payload = app.jwt.verify(corpo.tempToken) as Record<string, unknown>;
     expect(payload.pending2fa).toBe(true);
+    expect(payload.purpose).toBe('2fa_pending');
+  });
+
+  it('ACHADO: o tempToken do 2FA não abre rota protegida — o bypass, ponta a ponta', async () => {
+    // O ataque completo, com as rotas reais e o `jwtAuth` real (este arquivo
+    // não mocka o middleware, diferente de `auth-2fa.test.ts`):
+    //
+    //   1. atacante tem apenas a senha de uma conta com 2FA ligado;
+    //   2. faz login e recebe `tempToken` na resposta — sem digitar TOTP;
+    //   3. manda esse token como Bearer numa rota de sessão.
+    //
+    // O passo 3 respondia 200 antes de `lib/jwt-purpose.ts` existir, o que
+    // anulava o segundo fator. Aqui ele tem que ser 401.
+    usuarioDb.findUnique.mockResolvedValue({
+      id: 'u1', email: 'a@ex.com', passwordHash: hashValido, totpEnabled: true,
+    });
+
+    const login = await app.inject({
+      method: 'POST', url: '/auth/login',
+      payload: { email: 'a@ex.com', password: 'senha-correta' },
+    });
+    const { tempToken } = login.json();
+
+    const comTempToken = await app.inject({
+      method: 'GET', url: '/auth/me',
+      headers: { authorization: `Bearer ${tempToken}` },
+    });
+
+    expect(comTempToken.statusCode).toBe(401);
+    expect(comTempToken.json().code).toBe('TOKEN_WRONG_PURPOSE');
   });
 });
 
