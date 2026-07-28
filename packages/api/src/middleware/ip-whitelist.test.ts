@@ -151,7 +151,7 @@ describe('apiIpWhitelist — bloqueio', () => {
     const r = await chamar('9.9.9.9');
 
     expect(r.statusCode).toBe(403);
-    expect(r.json()).toEqual({
+    expect(r.json()).toMatchObject({
       error: true,
       message: 'Your IP address is not allowed.',
       code: 'IP_FORBIDDEN',
@@ -167,17 +167,18 @@ describe('apiIpWhitelist — bloqueio', () => {
     expect(handlerExecutado).toBe(0);
   });
 
-  it('a resposta de bloqueio NÃO traz request_id', async () => {
-    // Divergência de contrato deliberada: o middleware responde direto pelo
-    // `reply`, sem passar pelo error handler global de `index.ts` (que é quem
-    // acrescenta `request_id` e o header `X-Request-Id`). Quem depura um 403
-    // desses não tem correlação de log pelo corpo da resposta — só pelo IP.
+  it('a resposta de bloqueio traz request_id e o header X-Request-Id', async () => {
+    // Este middleware responde direto pelo `reply`, sem passar pelo
+    // `setErrorHandler` — que é quem acrescentava o `request_id`. Eram 31
+    // pontos assim, e todos saíam sem correlação de log. Agora um hook de
+    // `preSerialization` completa o envelope de qualquer resposta de erro,
+    // tenha ela sido lançada ou enviada direto.
     apiAtual = apiCom('1.2.3.4');
 
     const r = await chamar('9.9.9.9');
 
-    expect(r.json().request_id).toBeUndefined();
-    expect(r.headers['x-request-id']).toBeUndefined();
+    expect(r.json().request_id).toBeTruthy();
+    expect(r.headers['x-request-id']).toBe(r.json().request_id);
   });
 
   it('lista com vírgula sobrando não vira curinga', async () => {

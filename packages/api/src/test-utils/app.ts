@@ -17,7 +17,11 @@
  */
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
-import { registerErrorHandler, registerNotFoundHandler } from '../lib/error-handler.js';
+import {
+  registerErrorHandler,
+  registerNotFoundHandler,
+  registerRequestIdOnErrors,
+} from '../lib/error-handler.js';
 
 /**
  * Lê o argumento de uma chamada de mock com segurança de tipo.
@@ -60,6 +64,7 @@ export async function montarApp({ rotas, prefixo }: Opts): Promise<FastifyInstan
   // em silêncio. Extraí-lo para `lib/error-handler.ts` eliminou a escolha.
   registerErrorHandler(app);
   registerNotFoundHandler(app);
+  registerRequestIdOnErrors(app);
   await app.register(rotas, prefixo ? { prefix: prefixo } : {});
   await app.ready();
 

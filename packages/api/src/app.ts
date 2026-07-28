@@ -6,7 +6,11 @@ import swagger from '@fastify/swagger';
 import rawBody from 'fastify-raw-body';
 import { env } from './config/env.js';
 import { redactPaths } from './lib/logger.js';
-import { registerErrorHandler, registerNotFoundHandler } from './lib/error-handler.js';
+import {
+  registerErrorHandler,
+  registerNotFoundHandler,
+  registerRequestIdOnErrors,
+} from './lib/error-handler.js';
 import { sheetsRoutes } from './routes/v1/sheets.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboard/apis.js';
@@ -132,6 +136,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   registerErrorHandler(app);
   registerNotFoundHandler(app);
+  registerRequestIdOnErrors(app);
 
   registerUsageLogger(app);
 

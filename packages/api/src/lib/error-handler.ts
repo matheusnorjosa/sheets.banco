@@ -17,6 +17,40 @@ import { AppError } from './errors.js';
  * (ver `docs/error-handling.md`).
  */
 /**
+ * Garante `request_id` em TODA resposta de erro, inclusive nas que não passam
+ * pelo `setErrorHandler`.
+ *
+ * O handler acima só vê o que é **lançado**. Mas 31 pontos espalhados por 10
+ * arquivos — os middlewares de auth/cors/ip/hmac e várias rotas — respondem
+ * com `reply.status(n).send({ error: true, ... })` direto, sem lançar. Essas
+ * respostas saíam sem `request_id` e sem o header `X-Request-Id`, contrariando
+ * a primeira linha de `docs/error-handling.md`.
+ *
+ * Um hook em vez de 31 edições: além de ser um lugar só, ele cobre o próximo
+ * `reply.send` de erro que alguém escrever. Editar os 31 sites resolveria hoje
+ * e voltaria a divergir no primeiro que fosse esquecido.
+ *
+ * `preSerialization` (não `onSend`) para trabalhar com o OBJETO, antes de
+ * virar string — assim não há parse nem re-serialização. O hook não roda para
+ * payload que já é string ou buffer, o que também evita mexer em CSV, XLSX e
+ * no stream de SSE.
+ */
+export function registerRequestIdOnErrors(app: FastifyInstance) {
+  app.addHook('preSerialization', async (request, reply, payload) => {
+    if (reply.statusCode < 400) return payload;
+    if (!payload || typeof payload !== 'object') return payload;
+
+    const corpo = payload as Record<string, unknown>;
+    // `error: true` é a marca do envelope da casa. Resposta de erro que não o
+    // usa (nenhuma hoje) fica intocada de propósito.
+    if (corpo.error !== true || corpo.request_id) return payload;
+
+    reply.header('X-Request-Id', request.id);
+    return { ...corpo, request_id: request.id };
+  });
+}
+
+/**
  * Handler de rota não encontrada.
  *
  * Precisa ser registrado à parte porque o Fastify **não** manda o 404 de rota
