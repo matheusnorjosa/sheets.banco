@@ -1,5 +1,33 @@
 #!/usr/bin/env node
 
+/**
+ * CLI do sheets.banco.
+ *
+ * ## Sobre os alertas `js/file-access-to-http` do CodeQL
+ *
+ * O CodeQL aponta dois fluxos aqui, e os dois são **o propósito da
+ * ferramenta**, não vazamento:
+ *
+ * - **"File data in outbound network request"** — o CLI lê `apiUrl` e `token`
+ *   de `~/.sheets-banco/config.json` e os envia no `fetch`. É como qualquer
+ *   CLI autenticado funciona (`gh`, `aws`, `docker` fazem o mesmo); a
+ *   alternativa seria pedir o token a cada comando.
+ * - **"Network data written to file"** — `sheets-banco export --output x.csv`
+ *   grava em disco o que a API respondeu. É o comando fazendo o que o nome diz.
+ *
+ * Em ambos os casos o "untrusted data" é o conteúdo da planilha do próprio
+ * usuário, obtido de uma API que ele configurou, escrito num caminho que ele
+ * escolheu. Não há elevação: quem roda o CLI já tem o token e já pode escrever
+ * onde quiser.
+ *
+ * Os fluxos sempre existiram; passaram a ser rastreáveis quando o tratamento
+ * de resposta foi extraído para `lerCorpo()`. Os alertas correspondentes estão
+ * dispensados no painel apontando para este comentário.
+ *
+ * O que de fato protege o token é a permissão do arquivo — `0600` em diretório
+ * `0700`, ver `saveConfig` abaixo.
+ */
+
 import { Command } from 'commander';
 import fs from 'node:fs';
 import path from 'node:path';
