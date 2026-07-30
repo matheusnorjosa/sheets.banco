@@ -2,6 +2,7 @@ import { Queue } from 'bullmq';
 import type { SheetRow } from '../services/google-sheets.service.js';
 import { buildJobOptions } from '../lib/queue-options.js';
 import { conexaoRedisDe } from '../lib/redis-connection.js';
+import { comFilaDisponivel } from '../lib/queue-guard.js';
 
 export interface SheetWriteJobData {
   type: 'append' | 'update' | 'delete' | 'clear';
@@ -47,10 +48,19 @@ export function getSheetsWriteQueue(): Queue<SheetWriteJobData, SheetWriteResult
  * Returns the job ID for tracking.
  */
 export async function enqueueWrite(data: SheetWriteJobData): Promise<string> {
-  const q = getSheetsWriteQueue();
-  const job = await q.add(data.type, data, {
-    // Group by spreadsheetId to prevent concurrent writes to the same sheet
-    jobId: `${data.type}-${data.spreadsheetId}-${Date.now()}`,
-  });
-  return job.id ?? 'unknown';
+  // `getSheetsWriteQueue()` DENTRO do guarda: sem `REDIS_URL` ele lança "not
+  // initialized", que também é indisponibilidade e também merece 503.
+  return comFilaDisponivel(
+    'sheets-write',
+    async () => {
+      const q = getSheetsWriteQueue();
+      const job = await q.add(data.type, data, {
+        // Group by spreadsheetId to prevent concurrent writes to the same sheet
+        jobId: `${data.type}-${data.spreadsheetId}-${Date.now()}`,
+      });
+      return job.id ?? 'unknown';
+    },
+    // Esta é a única fila com saída: a mesma escrita passa direto pelo Google.
+    'sync=true',
+  );
 }
