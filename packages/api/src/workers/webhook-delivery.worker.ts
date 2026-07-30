@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { decryptIfEncrypted } from '../lib/secret-cipher.js';
 import { conexaoRedisDe } from '../lib/redis-connection.js';
+import { buildWorkerOptions } from '../lib/worker-options.js';
 
 const log = logger.child({ component: 'worker:webhook-delivery' });
 
@@ -92,10 +93,10 @@ export function initWebhookDeliveryWorker(redisUrl: string): Worker<WebhookDeliv
   worker = new Worker<WebhookDeliveryJobData>(
     'webhook-delivery',
     processJob,
-    {
+    buildWorkerOptions({
       connection: conexaoRedisDe(redisUrl),
       concurrency: 5,
-    },
+    }),
   );
 
   worker.on('failed', (job, err) => {
