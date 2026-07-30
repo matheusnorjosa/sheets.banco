@@ -66,6 +66,14 @@ const { filasCriadas } = vi.hoisted(() => ({
   filasCriadas: [] as FilaCriada[],
 }));
 
+// As filas passaram a enfileirar por dentro de `comFilaDisponivel`, que loga a
+// falha original antes de virar 503 — e o logger carrega `config/env.js`, que
+// chama `process.exit(1)` quando as variáveis não estão setadas. Sem este mock
+// a suíte inteira morre no import, não numa asserção.
+vi.mock('../config/env.js', () => ({
+  env: { LOG_LEVEL: 'silent', NODE_ENV: 'test' },
+}));
+
 vi.mock('bullmq', () => ({
   Queue: class {
     add: Mock<AddFn> = vi.fn(async () => ({ id: 'job-padrao' }));
@@ -85,6 +93,30 @@ function filaCriada(indice = 0): FilaCriada {
     throw new Error(`Esperava ao menos ${indice + 1} fila(s) criada(s), houve ${filasCriadas.length}.`);
   }
   return registro;
+}
+
+/** Forma do erro que os `enqueue*` lançam com a fila fora (ver `queue-guard.ts`). */
+interface ErroDeFila {
+  statusCode: number;
+  code: string;
+  message: string;
+}
+
+/**
+ * Captura a rejeição com tipo útil, e falha alto se a promessa RESOLVER.
+ *
+ * `promessa.catch((e) => e)` sozinho devolve `void | E` no strict, e um teste
+ * que só lê propriedades passaria silenciosamente se a promessa parasse de
+ * rejeitar — que é justamente o que ele deveria detectar.
+ */
+async function erroDe(promessa: Promise<unknown>): Promise<ErroDeFila> {
+  const semErro = Symbol('resolveu');
+  const resultado = await promessa.then(
+    () => semErro,
+    (e: unknown) => e,
+  );
+  if (resultado === semErro) throw new Error('Esperava rejeição, mas a promessa resolveu.');
+  return resultado as ErroDeFila;
 }
 
 const URL_PADRAO = 'redis://localhost:6379';
@@ -178,14 +210,21 @@ describe('getters antes do init', () => {
     expect(filasCriadas).toHaveLength(0);
   });
 
-  it('enqueueWrite rejeita antes do init (propaga o erro do getter)', async () => {
-    await expect(
+  // Os getters acima continuam lançando o `Error` cru — é o contrato interno
+  // deles. Já os `enqueue*` são chamados por rota, e sem `REDIS_URL` não existe
+  // fila: isso é indisponibilidade, então sai 503 e não 500. Ver `queue-guard.ts`.
+  it('enqueueWrite sem init responde 503 com a saída ?sync=true', async () => {
+    const erro = await erroDe(
       filaDeEscrita.enqueueWrite({ type: 'append', userId: 'u1', spreadsheetId: 'planilha-abc' }),
-    ).rejects.toThrow('Sheets write queue not initialized');
+    );
+
+    expect(erro.statusCode).toBe(503);
+    expect(erro.code).toBe('QUEUE_UNAVAILABLE');
+    expect(erro.message).toContain('?sync=true');
   });
 
-  it('enqueueWebhookDelivery rejeita antes do init', async () => {
-    await expect(
+  it('enqueueWebhookDelivery sem init responde 503 sem prometer saída', async () => {
+    const erro = await erroDe(
       filaDeWebhook.enqueueWebhookDelivery({
         subscriptionId: 'sub-1',
         deliveryId: 'entrega-1',
@@ -194,11 +233,20 @@ describe('getters antes do init', () => {
         event: 'row.created',
         payload: {},
       }),
-    ).rejects.toThrow('Webhook delivery queue not initialized');
+    );
+
+    expect(erro.statusCode).toBe(503);
+    expect(erro.code).toBe('QUEUE_UNAVAILABLE');
+    // Entrega de webhook não tem equivalente de ?sync=true.
+    expect(erro.message).not.toContain('sync=true');
   });
 
-  it('removeSyncSchedule rejeita antes do init', async () => {
-    await expect(filaDeSync.removeSyncSchedule('api-1')).rejects.toThrow('Scheduled sync queue not initialized');
+  it('removeSyncSchedule sem init responde 503 sem prometer saída', async () => {
+    const erro = await erroDe(filaDeSync.removeSyncSchedule('api-1'));
+
+    expect(erro.statusCode).toBe(503);
+    expect(erro.code).toBe('QUEUE_UNAVAILABLE');
+    expect(erro.message).not.toContain('sync=true');
   });
 });
 

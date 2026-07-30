@@ -1,6 +1,7 @@
 import { Queue } from 'bullmq';
 import { buildJobOptions } from '../lib/queue-options.js';
 import { conexaoRedisDe } from '../lib/redis-connection.js';
+import { comFilaDisponivel } from '../lib/queue-guard.js';
 
 export interface WebhookDeliveryJobData {
   subscriptionId: string;
@@ -42,6 +43,8 @@ export function getWebhookDeliveryQueue(): Queue<WebhookDeliveryJobData> {
 }
 
 export async function enqueueWebhookDelivery(data: WebhookDeliveryJobData): Promise<void> {
-  const q = getWebhookDeliveryQueue();
-  await q.add(data.event, data);
+  await comFilaDisponivel('webhook-delivery', async () => {
+    const q = getWebhookDeliveryQueue();
+    await q.add(data.event, data);
+  });
 }

@@ -287,6 +287,46 @@ describe('assíncrono por padrão, síncrono sob demanda', () => {
     expect(job.column).toBe('cpf');
     expect(job.value).toBe('12345');
   });
+
+  // Regressão do incidente de 2026-07-29: a cota do Upstash estourou, todo
+  // PATCH/POST sem ?sync=true virou `500 INTERNAL_ERROR` e a leitura seguiu em
+  // 200 (o cache engole erro de Redis e cai para o Google). Quem consumia
+  // concluiu que a API não gravava mais — mas `?sync=true` funcionava. A
+  // resposta tem que dizer isso.
+  it('fila fora responde 503 com a saída, não 500 mudo', async () => {
+    const { QueueUnavailableError } = await import('../../lib/errors.js');
+    // 'sync=true' é o que `enqueueWrite` passa de verdade ao guarda.
+    enqueueWrite.mockRejectedValue(new QueueUnavailableError('sync=true'));
+
+    const r = await app.inject({
+      method: 'PATCH', url: '/api/v1/api-1/cpf/12345',
+      payload: { data: { cargo: 'Coordenador' } },
+    });
+
+    expect(r.statusCode).toBe(503);
+    const corpo = r.json();
+    expect(corpo.code).toBe('QUEUE_UNAVAILABLE');
+    // A alternativa precisa estar na resposta, senão o próximo consumidor
+    // repete a investigação inteira para descobrir o `?sync=true`.
+    expect(corpo.message).toContain('sync=true');
+    expect(corpo.details).toEqual({ retry_with: 'sync=true' });
+    expect(corpo.request_id).toBeTruthy();
+  });
+
+  it('escrita com ?sync=true não toca na fila — é a saída quando o Redis está fora', async () => {
+    // O par deste teste com o de cima é o que sustenta a mensagem de erro: não
+    // basta sugerir `?sync=true`, esse caminho tem que de fato não enfileirar.
+    enqueueWrite.mockRejectedValue(new Error('Redis morto'));
+
+    const r = await app.inject({
+      method: 'PATCH', url: '/api/v1/api-1/cpf/12345?sync=true',
+      payload: { data: { cargo: 'Coordenador' } },
+    });
+
+    expect(r.statusCode).toBe(200);
+    expect(sheetsService.updateRows).toHaveBeenCalled();
+    expect(enqueueWrite).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /:apiId', () => {

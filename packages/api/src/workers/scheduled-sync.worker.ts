@@ -3,6 +3,7 @@ import type { SyncJobData } from '../queues/scheduled-sync.queue.js';
 import { invalidateCache } from '../services/google-sheets.service.js';
 import { logger } from '../lib/logger.js';
 import { conexaoRedisDe } from '../lib/redis-connection.js';
+import { buildWorkerOptions } from '../lib/worker-options.js';
 
 const log = logger.child({ component: 'worker:scheduled-sync' });
 
@@ -21,10 +22,10 @@ export function initScheduledSyncWorker(redisUrl: string): Worker<SyncJobData> {
   worker = new Worker<SyncJobData>(
     'scheduled-sync',
     processSync,
-    {
+    buildWorkerOptions({
       connection: conexaoRedisDe(redisUrl),
       concurrency: 2,
-    },
+    }),
   );
 
   worker.on('completed', (job) => {

@@ -35,3 +35,36 @@ export class SheetAccessError extends AppError {
     this.name = 'SheetAccessError';
   }
 }
+
+/**
+ * A fila de escrita está indisponível — Redis fora, sem cota ou não
+ * configurado.
+ *
+ * 503 e não 500 porque a causa é infraestrutura temporária, e principalmente
+ * porque **existe uma saída imediata**: `?sync=true` grava direto no Google sem
+ * passar pela fila. Em 2026-07-29 a cota do Upstash estourou e toda escrita
+ * enfileirada passou a responder `500 INTERNAL_ERROR`, o que fez um consumidor
+ * concluir que a API não conseguia mais gravar. Conseguia — só não pela rota
+ * que ele estava usando. A mensagem carrega a alternativa para que o próximo
+ * não perca esse tempo.
+ */
+export class QueueUnavailableError extends AppError {
+  /**
+   * @param saida Query param que contorna a fila, sem o `?` — hoje só
+   * `sync=true`, na escrita de planilha. Omitir quando não houver saída: a fila
+   * de webhook e a de sync agendado não têm equivalente, e oferecer
+   * `?sync=true` ali mandaria quem leu para um caminho que não existe. Errar
+   * essa mensagem é o defeito que este erro existe para corrigir.
+   */
+  constructor(saida?: string) {
+    super(
+      503,
+      'QUEUE_UNAVAILABLE',
+      saida
+        ? `The write queue is unavailable. Retry the same request with ?${saida} to write directly, bypassing the queue.`
+        : 'The queue is temporarily unavailable. Try again shortly.',
+      saida ? { retry_with: saida } : undefined,
+    );
+    this.name = 'QueueUnavailableError';
+  }
+}

@@ -1,6 +1,7 @@
 import { Queue } from 'bullmq';
 import { buildJobOptions } from '../lib/queue-options.js';
 import { conexaoRedisDe } from '../lib/redis-connection.js';
+import { comFilaDisponivel } from '../lib/queue-guard.js';
 
 export interface SyncJobData {
   sheetApiId: string;
@@ -37,31 +38,35 @@ export async function updateSyncSchedule(
   userId: string,
   spreadsheetId: string,
 ): Promise<void> {
-  const q = getScheduledSyncQueue();
+  await comFilaDisponivel('scheduled-sync', async () => {
+    const q = getScheduledSyncQueue();
 
-  // Remove existing repeatable job first
-  await removeSyncSchedule(sheetApiId);
+    // Remove existing repeatable job first
+    await removeSyncSchedule(sheetApiId);
 
-  // Add new repeatable job
-  await q.add(
-    'sync',
-    { sheetApiId, userId, spreadsheetId },
-    {
-      repeat: { pattern: cronExpression },
-      jobId: `sync-${sheetApiId}`,
-    },
-  );
+    // Add new repeatable job
+    await q.add(
+      'sync',
+      { sheetApiId, userId, spreadsheetId },
+      {
+        repeat: { pattern: cronExpression },
+        jobId: `sync-${sheetApiId}`,
+      },
+    );
+  });
 }
 
 /**
  * Remove a repeatable sync job for an API.
  */
 export async function removeSyncSchedule(sheetApiId: string): Promise<void> {
-  const q = getScheduledSyncQueue();
-  const repeatableJobs = await q.getRepeatableJobs();
-  for (const job of repeatableJobs) {
-    if (job.id === `sync-${sheetApiId}`) {
-      await q.removeRepeatableByKey(job.key);
+  await comFilaDisponivel('scheduled-sync', async () => {
+    const q = getScheduledSyncQueue();
+    const repeatableJobs = await q.getRepeatableJobs();
+    for (const job of repeatableJobs) {
+      if (job.id === `sync-${sheetApiId}`) {
+        await q.removeRepeatableByKey(job.key);
+      }
     }
-  }
+  });
 }
