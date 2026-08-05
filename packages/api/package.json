@@ -25,7 +25,7 @@
     "@fastify/swagger": "^9.8.1",
     "@sheets-banco/shared": "*",
     "bcrypt": "^6.0.0",
-    "bullmq": "^5.81.2",
+    "bullmq": "^6.0.5",
     "cron-parser": "^4.9.0",
     "csv-parse": "^7.0.1",
     "fastify": "^5.11.0",
