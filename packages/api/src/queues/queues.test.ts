@@ -11,7 +11,7 @@
  * `jobId` colidir, o BullMQ descarta a escrita sem erro.
  *
  * A estratégia é mockar `bullmq` com uma `Queue` falsa que só registra o que
- * recebeu no construtor e expõe `add`/`getRepeatableJobs`/`removeRepeatableByKey`
+ * recebeu no construtor e expõe `add`/`upsertJobScheduler`/`removeJobScheduler`
  * como spies. Assim os testes leem as decisões do módulo direto do argumento.
  *
  * `buildJobOptions` NÃO é mockado: o ponto dos testes de opções é justamente
@@ -40,20 +40,25 @@ interface OpcoesDaFila {
   defaultJobOptions: Record<string, unknown>;
 }
 
-/** Só os dois campos que `removeSyncSchedule` lê de cada repetível. */
-interface RepetivelFalso {
-  id: string | null;
-  key: string;
+/** Molde do job que o Job Scheduler do bullmq 6 carimba a cada disparo. */
+interface ModeloDeJob {
+  name?: string;
+  data?: unknown;
+  opts?: Record<string, unknown>;
 }
 
 type AddFn = (nome: string, dados: unknown, opts?: Record<string, unknown>) => Promise<{ id?: string }>;
-type ListarRepetiveisFn = () => Promise<RepetivelFalso[]>;
-type RemoverPorChaveFn = (chave: string) => Promise<void>;
+type UpsertAgendamentoFn = (
+  id: string,
+  repeticao: Record<string, unknown>,
+  modelo?: ModeloDeJob,
+) => Promise<{ id?: string }>;
+type RemoverAgendamentoFn = (id: string) => Promise<boolean>;
 
 interface FilaFalsa {
   add: Mock<AddFn>;
-  getRepeatableJobs: Mock<ListarRepetiveisFn>;
-  removeRepeatableByKey: Mock<RemoverPorChaveFn>;
+  upsertJobScheduler: Mock<UpsertAgendamentoFn>;
+  removeJobScheduler: Mock<RemoverAgendamentoFn>;
 }
 
 interface FilaCriada {
@@ -77,8 +82,9 @@ vi.mock('../config/env.js', () => ({
 vi.mock('bullmq', () => ({
   Queue: class {
     add: Mock<AddFn> = vi.fn(async () => ({ id: 'job-padrao' }));
-    getRepeatableJobs: Mock<ListarRepetiveisFn> = vi.fn(async () => []);
-    removeRepeatableByKey: Mock<RemoverPorChaveFn> = vi.fn(async () => {});
+    upsertJobScheduler: Mock<UpsertAgendamentoFn> = vi.fn(async () => ({ id: 'job-agendado' }));
+    // `true` = havia agendamento e foi removido; `false` = não havia.
+    removeJobScheduler: Mock<RemoverAgendamentoFn> = vi.fn(async () => true);
 
     constructor(nome: string, opts: OpcoesDaFila) {
       filasCriadas.push({ nome, opts, instancia: this as unknown as FilaFalsa });
@@ -504,52 +510,63 @@ describe('enqueueWebhookDelivery', () => {
   });
 });
 
+/**
+ * O bullmq 6 removeu os "repeatable jobs" e pôs Job Schedulers no lugar. Estes
+ * testes valem pelo contrato NOVO — os antigos afirmavam propriedades da
+ * implementação antiga (remoção pela `key`, duplicados com o mesmo id,
+ * repetível com id `null`) que deixaram de existir e não fazia sentido manter.
+ */
 describe('updateSyncSchedule', () => {
   beforeEach(() => {
     filaDeSync.initScheduledSyncQueue(URL_PADRAO);
   });
 
-  it('adiciona job "sync" com repeat.pattern e jobId sync-<id>', async () => {
+  it('faz upsert do agendamento com id sync-<apiId>, o pattern e o molde do job', async () => {
     await filaDeSync.updateSyncSchedule('api-1', '0 3 * * *', 'user-1', 'planilha-abc');
-    const { add } = filaCriada().instancia;
-    expect(argDaChamada<string>(add, 0, 0)).toBe('sync');
-    expect(argDaChamada<SyncJobData>(add, 0, 1)).toEqual({
+    const { upsertJobScheduler } = filaCriada().instancia;
+
+    expect(argDaChamada<string>(upsertJobScheduler, 0, 0)).toBe('sync-api-1');
+    expect(argDaChamada<Record<string, unknown>>(upsertJobScheduler, 0, 1)).toEqual({ pattern: '0 3 * * *' });
+
+    const modelo = argDaChamada<ModeloDeJob>(upsertJobScheduler, 0, 2);
+    expect(modelo.name).toBe('sync');
+    expect(modelo.data).toEqual<SyncJobData>({
       sheetApiId: 'api-1',
       userId: 'user-1',
       spreadsheetId: 'planilha-abc',
     });
-    expect(argDaChamada<Record<string, unknown>>(add, 0, 2)).toEqual({
-      repeat: { pattern: '0 3 * * *' },
-      jobId: 'sync-api-1',
-    });
   });
 
-  it('REMOVE o agendamento antigo ANTES de adicionar o novo', async () => {
+  it('NÃO enfileira job direto — agendar é upsert, não `add`', async () => {
     const fila = filaCriada().instancia;
-    fila.getRepeatableJobs.mockResolvedValueOnce([{ id: 'sync-api-1', key: 'chave-antiga' }]);
-
     await filaDeSync.updateSyncSchedule('api-1', '0 3 * * *', 'user-1', 'planilha-abc');
-
-    expect(fila.removeRepeatableByKey).toHaveBeenCalledTimes(1);
-    expect(fila.removeRepeatableByKey).toHaveBeenCalledWith('chave-antiga');
-    expect(fila.add).toHaveBeenCalledTimes(1);
-    const ordemRemocao = fila.removeRepeatableByKey.mock.invocationCallOrder[0]!;
-    const ordemAdicao = fila.add.mock.invocationCallOrder[0]!;
-    expect(ordemRemocao).toBeLessThan(ordemAdicao);
+    expect(fila.add).not.toHaveBeenCalled();
+    expect(fila.upsertJobScheduler).toHaveBeenCalledTimes(1);
   });
 
-  it('sem agendamento anterior, só adiciona (nada a remover)', async () => {
+  it('não remove antes de agendar: o upsert é a operação inteira', async () => {
+    // O código antigo fazia remove+add, o que deixava a API sem agendamento
+    // nenhum entre as duas chamadas. Se alguém reintroduzir esse par, este
+    // teste cai.
     const fila = filaCriada().instancia;
+    await filaDeSync.updateSyncSchedule('api-1', '0 3 * * *', 'user-1', 'planilha-abc');
+    expect(fila.removeJobScheduler).not.toHaveBeenCalled();
+  });
+
+  it('reagendar a mesma API reusa o mesmo id (atualiza, não duplica)', async () => {
+    const fila = filaCriada().instancia;
+    await filaDeSync.updateSyncSchedule('api-1', '0 3 * * *', 'user-1', 'planilha-abc');
     await filaDeSync.updateSyncSchedule('api-1', '*/5 * * * *', 'user-1', 'planilha-abc');
-    expect(fila.getRepeatableJobs).toHaveBeenCalledTimes(1);
-    expect(fila.removeRepeatableByKey).not.toHaveBeenCalled();
-    expect(fila.add).toHaveBeenCalledTimes(1);
+
+    expect(fila.upsertJobScheduler).toHaveBeenCalledTimes(2);
+    expect(argDaChamada<string>(fila.upsertJobScheduler, 0, 0)).toBe('sync-api-1');
+    expect(argDaChamada<string>(fila.upsertJobScheduler, 1, 0)).toBe('sync-api-1');
   });
 
   it('não valida o cron: repassa a expressão como veio', async () => {
     await filaDeSync.updateSyncSchedule('api-1', 'cron-invalido', 'user-1', 'planilha-abc');
-    const { add } = filaCriada().instancia;
-    expect(argDaChamada<{ repeat: { pattern: string } }>(add, 0, 2).repeat.pattern).toBe('cron-invalido');
+    const { upsertJobScheduler } = filaCriada().instancia;
+    expect(argDaChamada<{ pattern: string }>(upsertJobScheduler, 0, 1).pattern).toBe('cron-invalido');
   });
 });
 
@@ -558,56 +575,28 @@ describe('removeSyncSchedule', () => {
     filaDeSync.initScheduledSyncQueue(URL_PADRAO);
   });
 
-  it('remove só o repetível da API pedida, e pela `key` (não pelo id)', async () => {
+  it('remove pelo id do agendamento da API pedida', async () => {
     const fila = filaCriada().instancia;
-    fila.getRepeatableJobs.mockResolvedValueOnce([
-      { id: 'sync-api-1', key: 'chave-da-api-1' },
-      { id: 'sync-api-2', key: 'chave-da-api-2' },
-      { id: 'outra-coisa', key: 'chave-de-outro-job' },
-    ]);
-
     await filaDeSync.removeSyncSchedule('api-2');
-
-    expect(fila.removeRepeatableByKey).toHaveBeenCalledTimes(1);
-    expect(fila.removeRepeatableByKey).toHaveBeenCalledWith('chave-da-api-2');
+    expect(fila.removeJobScheduler).toHaveBeenCalledTimes(1);
+    expect(fila.removeJobScheduler).toHaveBeenCalledWith('sync-api-2');
   });
 
-  it('o casamento é por igualdade exata (id "api" não apaga "sync-api-1")', async () => {
+  it('o id é derivado por igualdade exata ("api" não vira "sync-api-1")', async () => {
     const fila = filaCriada().instancia;
-    fila.getRepeatableJobs.mockResolvedValueOnce([{ id: 'sync-api-1', key: 'chave-da-api-1' }]);
     await filaDeSync.removeSyncSchedule('api');
-    expect(fila.removeRepeatableByKey).not.toHaveBeenCalled();
+    expect(fila.removeJobScheduler).toHaveBeenCalledWith('sync-api');
   });
 
-  it('remove TODOS os repetíveis duplicados que casam o mesmo id', async () => {
+  it('é no-op quando não havia agendamento (removeJobScheduler devolve false)', async () => {
     const fila = filaCriada().instancia;
-    fila.getRepeatableJobs.mockResolvedValueOnce([
-      { id: 'sync-api-1', key: 'chave-velha' },
-      { id: 'sync-api-1', key: 'chave-nova' },
-    ]);
-    await filaDeSync.removeSyncSchedule('api-1');
-    expect(fila.removeRepeatableByKey).toHaveBeenCalledTimes(2);
-    expect(fila.removeRepeatableByKey).toHaveBeenNthCalledWith(1, 'chave-velha');
-    expect(fila.removeRepeatableByKey).toHaveBeenNthCalledWith(2, 'chave-nova');
-  });
-
-  it('ignora repetíveis com id null (agendador sem jobId customizado)', async () => {
-    const fila = filaCriada().instancia;
-    fila.getRepeatableJobs.mockResolvedValueOnce([{ id: null, key: 'chave-sem-id' }]);
-    await filaDeSync.removeSyncSchedule('api-1');
-    expect(fila.removeRepeatableByKey).not.toHaveBeenCalled();
-  });
-
-  it('é no-op quando não há nenhum repetível', async () => {
-    const fila = filaCriada().instancia;
-    await filaDeSync.removeSyncSchedule('api-1');
-    expect(fila.getRepeatableJobs).toHaveBeenCalledTimes(1);
-    expect(fila.removeRepeatableByKey).not.toHaveBeenCalled();
+    fila.removeJobScheduler.mockResolvedValueOnce(false);
+    await expect(filaDeSync.removeSyncSchedule('api-1')).resolves.toBeUndefined();
   });
 
   it('propaga erro do Redis em vez de engolir', async () => {
     const fila = filaCriada().instancia;
-    fila.getRepeatableJobs.mockRejectedValueOnce(new Error('conexão recusada'));
+    fila.removeJobScheduler.mockRejectedValueOnce(new Error('conexão recusada'));
     await expect(filaDeSync.removeSyncSchedule('api-1')).rejects.toThrow('conexão recusada');
   });
 });
