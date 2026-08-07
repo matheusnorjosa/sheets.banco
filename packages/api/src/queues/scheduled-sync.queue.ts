@@ -30,7 +30,22 @@ export function getScheduledSyncQueue(): Queue<SyncJobData> {
 }
 
 /**
- * Add or update a repeatable sync job for an API.
+ * Identidade do agendamento de uma API. É a chave que o BullMQ usa para
+ * reconhecer que um `upsert` é atualização e não um segundo agendamento —
+ * derivar do `sheetApiId` garante um agendamento por API, sem varredura.
+ */
+function idDoAgendamento(sheetApiId: string): string {
+  return `sync-${sheetApiId}`;
+}
+
+/**
+ * Cria ou atualiza o agendamento de sincronização de uma API.
+ *
+ * O BullMQ 6 removeu os "repeatable jobs" e pôs Job Schedulers no lugar. A
+ * troca encolheu esta função: o `upsertJobScheduler` já é idempotente, então o
+ * remove-antes-de-adicionar que existia aqui deixou de ser necessário — e com
+ * ele some a janela em que a API ficava sem agendamento nenhum entre as duas
+ * chamadas.
  */
 export async function updateSyncSchedule(
   sheetApiId: string,
@@ -41,32 +56,25 @@ export async function updateSyncSchedule(
   await comFilaDisponivel('scheduled-sync', async () => {
     const q = getScheduledSyncQueue();
 
-    // Remove existing repeatable job first
-    await removeSyncSchedule(sheetApiId);
-
-    // Add new repeatable job
-    await q.add(
-      'sync',
-      { sheetApiId, userId, spreadsheetId },
-      {
-        repeat: { pattern: cronExpression },
-        jobId: `sync-${sheetApiId}`,
-      },
+    await q.upsertJobScheduler(
+      idDoAgendamento(sheetApiId),
+      { pattern: cronExpression },
+      { name: 'sync', data: { sheetApiId, userId, spreadsheetId } },
     );
   });
 }
 
 /**
- * Remove a repeatable sync job for an API.
+ * Remove o agendamento de sincronização de uma API.
+ *
+ * Antes era preciso listar todos os repeatable jobs e casar pela `key`; hoje a
+ * remoção é direta pelo id do scheduler. Devolver `false` (não existia) não é
+ * erro: remover agendamento ausente é no-op por design, porque quem chama
+ * desliga o `syncEnabled` sem saber se havia agendamento.
  */
 export async function removeSyncSchedule(sheetApiId: string): Promise<void> {
   await comFilaDisponivel('scheduled-sync', async () => {
     const q = getScheduledSyncQueue();
-    const repeatableJobs = await q.getRepeatableJobs();
-    for (const job of repeatableJobs) {
-      if (job.id === `sync-${sheetApiId}`) {
-        await q.removeRepeatableByKey(job.key);
-      }
-    }
+    await q.removeJobScheduler(idDoAgendamento(sheetApiId));
   });
 }

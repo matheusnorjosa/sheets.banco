@@ -1,12 +1,21 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-// Import DEFAULT, não nomeado. O `cron-parser@4` é CommonJS e termina com
-// `module.exports = CronParser`, um objeto montado em runtime — o
-// `cjs-module-lexer` do Node não consegue enumerar as propriedades, então
-// `import { parseExpression } from 'cron-parser'` compila e passa no vitest
-// (que usa o interop do Vite) e explode no boot em produção com
-// "Named export 'parseExpression' not found". Já quebrou um deploy uma vez.
-import cronParser from 'cron-parser';
+// Import NOMEADO — e o motivo de ter mudado importa, porque a regra aqui já
+// foi a oposta.
+//
+// No `cron-parser@4` o pacote terminava com `module.exports = CronParser`, um
+// objeto montado em runtime que o `cjs-module-lexer` do Node não consegue
+// enumerar. Ali o named import compilava, passava no vitest (que usa o interop
+// do Vite) e explodia no boot em produção com "Named export not found" — já
+// derrubou um deploy uma vez. Por isso o import era default.
+//
+// A v5 continua sendo CommonJS (`type: commonjs`, sem campo `exports`), então
+// o risco de interop NÃO sumiu com o major: ele mudou de lado. O que mudou é
+// que o build da v5 declara `exports.CronExpressionParser` diretamente, o
+// lexer enxerga, e o named import roda no Node de verdade — verificado, não
+// deduzido. Quem protege isso no CI é `scripts/verifica-imports.mjs`: tsc e
+// vitest passam nos dois casos, então nenhum dos dois serve de prova.
+import { CronExpressionParser } from 'cron-parser';
 import { prisma } from '../../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { jwtAuth } from '../../middleware/jwt-auth.js';
@@ -15,7 +24,14 @@ import { updateSyncSchedule, removeSyncSchedule } from '../../queues/scheduled-s
 import { invalidateSheetApiCache } from '../../services/sheet-api-cache.service.js';
 
 // Valida a expressão com o MESMO parser que vai executá-la: o `cron-parser`,
-// na versão que o BullMQ já fixa para agendar job repetível.
+// na versão que o BullMQ já usa para agendar (Job Scheduler).
+//
+// ⚠️ Esse "mesmo" depende de o npm deduplicar as duas dependências. Hoje
+// dedupa: a API pede `cron-parser ^5.7.0` e o `bullmq@6` pede `^5.6.2`, então
+// as duas resolvem para a MESMA instalação. Bumpar uma sem a outra pode
+// separá-las — foi o que ia acontecer ao mergear o bump do cron-parser
+// sozinho, com a API validando na v5 e a fila executando na v4. Se um dia
+// `npm ls cron-parser` deixar de mostrar `deduped`, a garantia abaixo caiu.
 //
 // Antes havia aqui uma regex escrita à mão, e ela tinha divergido da gramática
 // real nas duas direções. Recusava passo, porque a classe `[0-9,\-/]` não
@@ -35,7 +51,7 @@ function cronValido(expressao: string): boolean {
   if (expressao.trim().split(/\s+/).length !== 5) return false;
 
   try {
-    cronParser.parseExpression(expressao);
+    CronExpressionParser.parse(expressao);
     return true;
   } catch {
     return false;
